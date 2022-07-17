@@ -56,22 +56,7 @@ linters-settings:
   # Checks function and package cyclomatic complexity.
   cyclop:
     # The maximal code complexity to report.
-    max-complexity: 10
-
-  # Checks declaration order and count of types, constants, variables and functions.
-  decorder:
-    # Required order of `type`, `const`, `var` and `func` declarations inside a file.
-    dec-order:
-      - type
-      - const
-      - var
-      - func
-
-    # If true, order of declarations is not checked at all.
-    disable-dec-order-check: false
-
-    # If true, `init` func can be anywhere in file (does not have to be declared before all other functions).
-    disable-init-func-first-check: false
+    max-complexity: 30
 
   # Checks for duplicated code.
   dupl:
@@ -101,10 +86,10 @@ linters-settings:
   funlen:
     # Checks the number of lines in a function.
     # If lower than 0, disable the check.
-    lines: 60
+    lines: 80
     # Checks the number of statements in a function.
     # If lower than 0, disable the check.
-    statements: 40
+    statements: 60
 
   # Checks for package import order.
   gci:
@@ -120,7 +105,7 @@ linters-settings:
   # Checks the cognitive complexity of functions.
   gocognit:
     # Minimal code complexity to report
-    min-complexity: 10
+    min-complexity: 30
 
   # Checks for repeated strings that could be replaced by a constant.
   goconst:
@@ -134,7 +119,7 @@ linters-settings:
   # Checks the cyclomatic complexity of functions.
   gocyclo:
     # Minimal code complexity to report.
-    min-complexity: 10
+    min-complexity: 30
 
   # Check if comments end in a period.
   godot:
@@ -249,13 +234,13 @@ linters-settings:
       - name: banned-characters
         disabled: true
       - name: cyclomatic
-        arguments: [10]
+        arguments: [30]
       - name: max-public-structs
         disabled: true
       - name: line-length-limit
         arguments: [120]
       - name: cognitive-complexity
-        arguments: [10]
+        arguments: [30]
       - name: argument-limit
         disabled: true
       - name: file-header
@@ -263,16 +248,20 @@ linters-settings:
       - name: function-result-limit
         disabled: true
       - name: function-length
-        arguments: [40, 60]
+        arguments: [60, 80]
       - name: receiver-naming
         disabled: true
       - name: add-constant
         arguments:
           - maxLitCount: "3"
             allowStrs: '"",":",": "'
-            allowInts: "0,1,2"
-            allowFloats: "0.0,1.0,2.0"
+            allowInts: "0,1,2,3"
+            allowFloats: "0.0,1.0,2.0,3.0"
       - name: unused-receiver
+        disabled: true
+      - name: unhandled-error
+        disabled: true
+      - name: blank-imports
         disabled: true
 
   # Checks for struct tags correctness.
@@ -296,6 +285,7 @@ linters-settings:
     # See https://github.com/bombsimon/wsl/blob/master/doc/configuration.md for documentation of available settings.
     # Controls if you may cuddle assignments and anything without needing an empty line between them.
     allow-assign-and-anything: true
+    allow-cuddle-declarations: true
 
 # Options for linter availability.
 linters:
@@ -335,6 +325,7 @@ linters:
     - scopelint
     - testpackage
     - varnamelen
+    - decorder
 
 # Options for issue availability.
 issues:
@@ -364,6 +355,9 @@ issues:
 
     - linters: [gofumpt]
       text: "file is not `gofumpt`-ed with `-extra`"
+
+    - linters: [govet]
+      text: "pointer bytes could be"
 
   # Independently of option `exclude` we use default exclude patterns,
   # it can be disabled by this option.

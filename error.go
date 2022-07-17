@@ -23,37 +23,45 @@ func NewError(message string) func() *Error {
 }
 
 func (self *Error) Wrap(err error) *Error {
-	self.inner = errors.WrapWithDepth(1, err, self.message)
+	if err != nil {
+		self.inner = errors.WrapWithDepth(1, err, self.message)
+	}
 
 	return self
 }
 
 func (self *Error) WrapWithDepth(depth int, err error) *Error {
-	self.inner = errors.WrapWithDepth(depth+1, err, self.message)
+	if err != nil {
+		self.inner = errors.WrapWithDepth(depth+1, err, self.message)
+	}
 
 	return self
 }
 
 func (self *Error) WrapAs(err error) *Error {
-	if other, ok := err.(*Error); ok {
-		self.identifier = other.identifier
-	} else {
-		self.identifier = err.Error()
-	}
+	if err != nil {
+		if other, ok := err.(*Error); ok {
+			self.identifier = other.identifier
+		} else {
+			self.identifier = err.Error()
+		}
 
-	self.inner = errors.WrapWithDepth(1, err, self.message)
+		self.inner = errors.WrapWithDepth(1, err, self.message)
+	}
 
 	return self
 }
 
 func (self *Error) WrapAsWithDepth(depth int, err error) *Error {
-	if other, ok := err.(*Error); ok {
-		self.identifier = other.identifier
-	} else {
-		self.identifier = err.Error()
-	}
+	if err != nil {
+		if other, ok := err.(*Error); ok {
+			self.identifier = other.identifier
+		} else {
+			self.identifier = err.Error()
+		}
 
-	self.inner = errors.WrapWithDepth(depth+1, err, self.message)
+		self.inner = errors.WrapWithDepth(depth+1, err, self.message)
+	}
 
 	return self
 }

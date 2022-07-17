@@ -28,20 +28,24 @@ func NewException(status int, code string) func() *Exception {
 }
 
 func (self *Exception) Cause(err error) *Exception {
-	self.message = self.message + ": " + err.Error()
-	self.inner = errors.WrapWithDepth(1, err, self.message)
+	if err != nil {
+		self.message = self.message + ": " + err.Error()
+		self.inner = errors.WrapWithDepth(1, err, self.message)
+	}
 
 	return self
 }
 
 func (self *Exception) CauseAs(err error) *Exception {
-	if other, ok := err.(*Exception); ok {
-		self.identifier = other.identifier
-	} else {
-		self.identifier = err.Error()
-	}
+	if err != nil {
+		if other, ok := err.(*Exception); ok {
+			self.identifier = other.identifier
+		} else {
+			self.identifier = err.Error()
+		}
 
-	self.inner = errors.WrapWithDepth(1, err, self.message)
+		self.inner = errors.WrapWithDepth(1, err, self.message)
+	}
 
 	return self
 }
@@ -60,10 +64,8 @@ func (self *Exception) Withf(message string, args ...interface{}) *Exception {
 	return self
 }
 
-func (self *Exception) Redact() *Exception {
+func (self *Exception) Redact() {
 	self.message = ""
-
-	return self
 }
 
 func (self Exception) Code() string {
