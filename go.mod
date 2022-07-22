@@ -5,6 +5,7 @@ go 1.18
 require (
 	github.com/aodin/date v0.0.0-20160219192542-c5f6146fc644
 	github.com/cockroachdb/errors v1.9.0
+	github.com/eapache/go-resiliency v1.3.0
 	github.com/golang-migrate/migrate/v4 v4.15.2
 	github.com/jackc/pgx/v4 v4.16.1
 	github.com/labstack/echo/v4 v4.5.0

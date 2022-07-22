@@ -2,6 +2,7 @@
 package kit
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
 	"math/big"
@@ -13,6 +14,8 @@ import (
 
 	"github.com/aodin/date"
 	"github.com/cockroachdb/errors"
+	"github.com/eapache/go-resiliency/deadline"
+	"github.com/eapache/go-resiliency/retrier"
 	"github.com/jackc/pgx/v4"
 	gommon "github.com/labstack/gommon/log"
 	"github.com/rs/zerolog"
@@ -46,20 +49,20 @@ var Environments = _environments{
 }
 
 type _errors struct {
-	ErrAPIGeneric              func() *Error
 	ErrBinderGeneric           func() *Error
 	ErrExceptionHandlerGeneric func() *Error
 	ErrMigratorGeneric         func() *Error
 	ErrMigratorTimedOut        func() *Error
+	ErrDeadlineExceeded        func() *Error
 }
 
 // Errors contains the builtin errors.
 var Errors = _errors{
-	ErrAPIGeneric:              NewError("API failed"),
-	ErrBinderGeneric:           NewError("Binder failed"),
-	ErrExceptionHandlerGeneric: NewError("Error handler failed"),
-	ErrMigratorGeneric:         NewError("Migrator failed"),
-	ErrMigratorTimedOut:        NewError("Migrator timed out"),
+	ErrBinderGeneric:           NewError("binder failed"),
+	ErrExceptionHandlerGeneric: NewError("error handler failed"),
+	ErrMigratorGeneric:         NewError("migrator failed"),
+	ErrMigratorTimedOut:        NewError("migrator timed out"),
+	ErrDeadlineExceeded:        NewError("deadline exceeded"),
 }
 
 type _exceptions struct {
@@ -225,6 +228,49 @@ func (self _utils) EqualStringSlice(first *[]string, second *[]string) bool {
 	setSecond := strset.New((*second)...)
 
 	return strset.SymmetricDifference(setFirst, setSecond).IsEmpty()
+}
+
+func (self _utils) Deadline(ctx context.Context, work func(exceeded <-chan struct{}) error) error {
+	if ctxDeadline, ok := ctx.Deadline(); ok {
+		err := deadline.New(time.Until(ctxDeadline)).Run(work)
+		if err == deadline.ErrTimedOut {
+			err = Errors.ErrDeadlineExceeded()
+		}
+
+		return err
+	}
+
+	return work(nil)
+}
+
+func (self _utils) Retry(
+	attempts int, delay time.Duration,
+	classifier retrier.Classifier, work func(attempt int) error) error {
+	attempt := 1
+
+	// nolint
+	return retrier.New(retrier.ConstantBackoff(attempts, delay), classifier).
+		Run(func() error {
+			err := work(attempt)
+			attempt++
+
+			return err
+		})
+}
+
+func (self _utils) ExponentialRetry(
+	attempts int, initialDelay time.Duration, limitDelay time.Duration,
+	classifier retrier.Classifier, work func(attempt int) error) error {
+	attempt := 1
+
+	// nolint
+	return retrier.New(retrier.LimitedExponentialBackoff(attempts, initialDelay, limitDelay), classifier).
+		Run(func() error {
+			err := work(attempt)
+			attempt++
+
+			return err
+		})
 }
 
 func (self _utils) CopyInt(src *int) *int {

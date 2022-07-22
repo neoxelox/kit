@@ -3,6 +3,7 @@ package kit
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -16,26 +17,33 @@ const (
 	_MIGRATOR_POSTGRES_DSN            = "postgresql://%s:%s@%s:%d/%s?sslmode=%s&x-multi-statement=true"
 )
 
+var _DB_ALREADY_CLOSED_ERR_REGEX = regexp.MustCompile(`.*connection is already closed.*`)
+
+type MigratorRetryConfig struct {
+	Attempts     int
+	InitialDelay time.Duration
+	LimitDelay   time.Duration
+}
+
 type MigratorConfig struct {
 	MigrationsPath   *string
-	SchemaVersion    int
 	DatabaseHost     string
 	DatabasePort     int
 	DatabaseSSLMode  string
 	DatabaseUser     string
 	DatabasePassword string
 	DatabaseName     string
-	Timeout          *int
+	RetryConfig      *MigratorRetryConfig
 }
 
 type Migrator struct {
 	config   MigratorConfig
 	logger   Logger
 	migrator migrate.Migrate
-	done     chan bool
+	done     chan struct{}
 }
 
-func NewMigrator(logger Logger, config MigratorConfig) (*Migrator, error) {
+func NewMigrator(ctx context.Context, logger Logger, config MigratorConfig) (*Migrator, error) {
 	logger.SetLogger(logger.Logger().With().Str("layer", "migrator").Logger())
 
 	migrationsPath := _MIGRATOR_DEFAULT_MIGRATIONS_PATH
@@ -55,61 +63,143 @@ func NewMigrator(logger Logger, config MigratorConfig) (*Migrator, error) {
 		config.DatabaseSSLMode,
 	)
 
-	migrator, err := migrate.New(migrationsPath, dsn)
-	if err != nil {
+	attempts := 1
+	initialDelay := 0 * time.Second
+	limitDelay := 0 * time.Second
+	if config.RetryConfig != nil { // nolint
+		attempts = config.RetryConfig.Attempts
+		initialDelay = config.RetryConfig.InitialDelay
+		limitDelay = config.RetryConfig.LimitDelay
+	}
+
+	var migrator *migrate.Migrate
+
+	// TODO: only retry on specific errors
+	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+		return Utils.ExponentialRetry(attempts, initialDelay, limitDelay, nil, func(attempt int) error {
+			var err error
+
+			logger.Infof("Trying to connect to the database %d/%d", attempt, attempts)
+
+			migrator, err = migrate.New(migrationsPath, dsn)
+			if err != nil {
+				return Errors.ErrMigratorGeneric().WrapAs(err)
+			}
+
+			return nil
+		})
+	})
+	switch {
+	case err == nil:
+	case Errors.ErrDeadlineExceeded().Is(err):
+		return nil, Errors.ErrMigratorTimedOut()
+	default:
 		return nil, Errors.ErrMigratorGeneric().Wrap(err)
 	}
 
+	logger.Info("Connected to the database")
+
 	migrator.Log = *newMigrateLogger(logger)
-	if config.Timeout != nil {
-		migrator.LockTimeout = time.Duration(*config.Timeout) * time.Second
-	}
+
+	done := make(chan struct{}, 1)
+	close(done)
 
 	return &Migrator{
 		logger:   logger,
 		config:   config,
 		migrator: *migrator,
-		done:     make(chan bool, 1),
+		done:     done,
 	}, nil
 }
 
-func (self *Migrator) Apply(ctx context.Context) error {
-	var err error
+// TODO: concurrent-safe
+func (self *Migrator) Assert(ctx context.Context, schemaVersion int) error {
+	self.done = make(chan struct{}, 1)
 
-	if self.config.Timeout != nil {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, time.Duration(*self.config.Timeout)*time.Second)
-
-		defer cancel()
+	if ctxDeadline, ok := ctx.Deadline(); ok {
+		self.migrator.LockTimeout = time.Until(ctxDeadline)
 	}
 
-	go func() {
-		err = func() error {
-			schemaVersion, bad, err := self.migrator.Version() // nolint
+	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+		err := func() error {
+			currentSchemaVersion, bad, err := self.migrator.Version() // nolint
 			if err != nil && err != migrate.ErrNilVersion {
-				return Errors.ErrMigratorGeneric().Wrap(err)
+				return Errors.ErrMigratorGeneric().WrapAs(err)
 			}
 
 			if bad {
-				return Errors.ErrMigratorGeneric().Withf("current schema version %d is dirty", schemaVersion)
+				return Errors.ErrMigratorGeneric().Withf("current schema version %d is dirty", currentSchemaVersion)
 			}
 
-			if schemaVersion == uint(self.config.SchemaVersion) {
+			if currentSchemaVersion > uint(schemaVersion) {
+				return Errors.ErrMigratorGeneric().Withf("desired schema version %d behind from current one %d",
+					schemaVersion, currentSchemaVersion)
+			} else if currentSchemaVersion < uint(schemaVersion) {
+				return Errors.ErrMigratorGeneric().Withf("desired schema version %d ahead of current one %d",
+					schemaVersion, currentSchemaVersion)
+			}
+
+			self.logger.Infof("Desired schema version %d asserted", schemaVersion)
+
+			return nil
+		}()
+
+		select {
+		case <-self.done:
+		default:
+			close(self.done)
+		}
+
+		return err
+	})
+
+	self.migrator.LockTimeout = migrate.DefaultLockTimeout
+
+	switch {
+	case err == nil:
+		return nil
+	case Errors.ErrDeadlineExceeded().Is(err):
+		return Errors.ErrMigratorTimedOut()
+	default:
+		return Errors.ErrMigratorGeneric().Wrap(err)
+	}
+}
+
+// TODO: concurrent-safe
+func (self *Migrator) Apply(ctx context.Context, schemaVersion int) error {
+	self.done = make(chan struct{}, 1)
+
+	if ctxDeadline, ok := ctx.Deadline(); ok {
+		self.migrator.LockTimeout = time.Until(ctxDeadline)
+	}
+
+	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+		err := func() error {
+			currentSchemaVersion, bad, err := self.migrator.Version() // nolint
+			if err != nil && err != migrate.ErrNilVersion {
+				return Errors.ErrMigratorGeneric().WrapAs(err)
+			}
+
+			if bad {
+				return Errors.ErrMigratorGeneric().Withf("current schema version %d is dirty", currentSchemaVersion)
+			}
+
+			if currentSchemaVersion == uint(schemaVersion) {
 				self.logger.Info("No migrations to apply")
 
 				return nil
 			}
 
-			if schemaVersion > uint(self.config.SchemaVersion) {
+			if currentSchemaVersion > uint(schemaVersion) {
 				return Errors.ErrMigratorGeneric().Withf("desired schema version %d behind from current one %d",
-					self.config.SchemaVersion, schemaVersion)
+					schemaVersion, currentSchemaVersion)
 			}
 
-			self.logger.Infof("%d migrations to be applied", self.config.SchemaVersion-int(schemaVersion))
+			self.logger.Infof("%d migrations to be applied", schemaVersion-int(currentSchemaVersion))
 
-			err = self.migrator.Migrate(uint(self.config.SchemaVersion))
+			err = self.migrator.Migrate(uint(schemaVersion))
 			if err != nil {
-				return Errors.ErrMigratorGeneric().Wrap(err)
+				return Errors.ErrMigratorGeneric().WrapAs(err)
 			}
 
 			self.logger.Info("Applied all migrations successfully")
@@ -117,68 +207,67 @@ func (self *Migrator) Apply(ctx context.Context) error {
 			return nil
 		}()
 
-		close(self.done)
-	}()
-	select {
-	case <-ctx.Done():
-		err = Errors.ErrMigratorTimedOut().Wrap(err)
-	case <-self.done:
-	}
+		select {
+		case <-self.done:
+		default:
+			close(self.done)
+		}
 
-	errC := self.Close(ctx)
+		return err
+	})
 
-	self.done = make(chan bool, 1)
+	self.migrator.LockTimeout = migrate.DefaultLockTimeout
 
-	err = Utils.CombineErrors(err, errC)
-	if err != nil {
+	switch {
+	case err == nil:
+		return nil
+	case Errors.ErrDeadlineExceeded().Is(err):
+		return Errors.ErrMigratorTimedOut()
+	default:
 		return Errors.ErrMigratorGeneric().Wrap(err)
 	}
-
-	return nil
 }
 
-func (self *Migrator) Rollback(ctx context.Context) error {
-	var err error
+// TODO: concurrent-safe
+func (self *Migrator) Rollback(ctx context.Context, schemaVersion int) error {
+	self.done = make(chan struct{}, 1)
 
-	if self.config.Timeout != nil {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, time.Duration(*self.config.Timeout)*time.Second)
-
-		defer cancel()
+	if ctxDeadline, ok := ctx.Deadline(); ok {
+		self.migrator.LockTimeout = time.Until(ctxDeadline)
 	}
 
-	go func() {
-		err = func() error {
-			schemaVersion, bad, err := self.migrator.Version() // nolint
+	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+		err := func() error {
+			currentSchemaVersion, bad, err := self.migrator.Version() // nolint
 			if err != nil {
-				return Errors.ErrMigratorGeneric().Wrap(err)
+				return Errors.ErrMigratorGeneric().WrapAs(err)
 			}
 
 			if bad {
-				self.logger.Infof("Current schema version %d is dirty, ignoring", schemaVersion)
+				self.logger.Infof("Current schema version %d is dirty, ignoring", currentSchemaVersion)
 
-				err = self.migrator.Force(int(schemaVersion))
+				err = self.migrator.Force(int(currentSchemaVersion))
 				if err != nil {
-					return Errors.ErrMigratorGeneric().Wrap(err)
+					return Errors.ErrMigratorGeneric().WrapAs(err)
 				}
 			}
 
-			if schemaVersion == uint(self.config.SchemaVersion) {
+			if currentSchemaVersion == uint(schemaVersion) {
 				self.logger.Info("No migrations to rollback")
 
 				return nil
 			}
 
-			if schemaVersion < uint(self.config.SchemaVersion) {
+			if currentSchemaVersion < uint(schemaVersion) {
 				return Errors.ErrMigratorGeneric().Withf("desired schema version %d ahead of current one %d",
-					self.config.SchemaVersion, schemaVersion)
+					schemaVersion, currentSchemaVersion)
 			}
 
-			self.logger.Infof("%d migrations to be rollbacked", int(schemaVersion)-self.config.SchemaVersion)
+			self.logger.Infof("%d migrations to be rollbacked", int(currentSchemaVersion)-schemaVersion)
 
-			err = self.migrator.Migrate(uint(self.config.SchemaVersion))
+			err = self.migrator.Migrate(uint(schemaVersion))
 			if err != nil {
-				return Errors.ErrMigratorGeneric().Wrap(err)
+				return Errors.ErrMigratorGeneric().WrapAs(err)
 			}
 
 			self.logger.Info("Rollbacked all migrations successfully")
@@ -186,43 +275,48 @@ func (self *Migrator) Rollback(ctx context.Context) error {
 			return nil
 		}()
 
-		close(self.done)
-	}()
-	select {
-	case <-ctx.Done():
-		err = Errors.ErrMigratorTimedOut().Wrap(err)
-	case <-self.done:
-	}
+		select {
+		case <-self.done:
+		default:
+			close(self.done)
+		}
 
-	errC := self.Close(ctx)
+		return err
+	})
 
-	self.done = make(chan bool, 1)
+	self.migrator.LockTimeout = migrate.DefaultLockTimeout
 
-	err = Utils.CombineErrors(err, errC)
-	if err != nil {
+	switch {
+	case err == nil:
+		return nil
+	case Errors.ErrDeadlineExceeded().Is(err):
+		return Errors.ErrMigratorTimedOut()
+	default:
 		return Errors.ErrMigratorGeneric().Wrap(err)
 	}
-
-	return nil
 }
 
-func (self *Migrator) Close(ctx context.Context) error {
-	if deadline, ok := ctx.Deadline(); ok {
-		self.logger.Logger().Info().Time("deadline", deadline).Msg("Closing migrator")
-	} else {
-		self.logger.Info("Closing migrator")
-	}
+func (self *Migrator) Close(ctx context.Context) error { // nolint
+	self.logger.Info("Closing migrator")
 
-	self.migrator.GracefulStop <- true
+	select {
+	case self.migrator.GracefulStop <- true:
+	default:
+	}
 
 	<-self.done
 
 	err, errD := self.migrator.Close()
+	if errD != nil && _DB_ALREADY_CLOSED_ERR_REGEX.MatchString(errD.Error()) {
+		errD = nil
+	}
 
 	err = Utils.CombineErrors(err, errD)
 	if err != nil {
 		return Errors.ErrMigratorGeneric().Wrap(err)
 	}
+
+	self.logger.Info("Closed migrator")
 
 	return nil
 }

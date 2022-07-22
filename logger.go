@@ -20,9 +20,10 @@ const (
 )
 
 type LoggerConfig struct {
-	Environment string
-	App         string
-	Level       *zerolog.Level
+	Environment     string
+	App             string
+	TimeFieldFormat *string
+	Level           *zerolog.Level
 }
 
 type Logger struct {
@@ -36,19 +37,26 @@ type Logger struct {
 }
 
 func NewLogger(config LoggerConfig) *Logger {
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	timeFieldFormat := zerolog.TimeFormatUnixMicro
+	if config.TimeFieldFormat != nil {
+		timeFieldFormat = *config.TimeFieldFormat
+	}
+
+	zerolog.TimeFieldFormat = timeFieldFormat
 	zerolog.TimestampFieldName = "timestamp"
 	zerolog.CallerSkipFrameCount = 3
 
 	level := zerolog.DebugLevel
-	if config.Level != nil {
-		level = *config.Level
-	} else if config.Environment != Environments.Development {
+	if config.Environment != Environments.Development {
 		level = zerolog.InfoLevel
 	}
 
-	out := diode.NewWriter(os.Stderr, _LOGGER_WRITER_SIZE, _LOGGER_POLL_INTERVAL, func(missed int) {
-		fmt.Fprintf(os.Stderr, "{\"%s\":\"%s\",\"%s\":\"Logger dropped %d messages\"}\n", _LOGGER_APP_FIELD_NAME,
+	if config.Level != nil {
+		level = *config.Level
+	}
+
+	out := diode.NewWriter(os.Stdout, _LOGGER_WRITER_SIZE, _LOGGER_POLL_INTERVAL, func(missed int) {
+		fmt.Fprintf(os.Stdout, "{\"%s\":\"%s\",\"%s\":\"Logger dropped %d messages\"}\n", _LOGGER_APP_FIELD_NAME,
 			config.App, zerolog.MessageFieldName, missed)
 	})
 
@@ -72,15 +80,12 @@ func (self *Logger) SetLogger(l zerolog.Logger) {
 }
 
 func (self Logger) Flush() {
+	os.Stdout.Sync()
 	os.Stderr.Sync()
 }
 
-func (self Logger) Close(ctx context.Context) error {
-	if deadline, ok := ctx.Deadline(); ok {
-		self.logger.Info().Time("deadline", deadline).Msg("Closing logger")
-	} else {
-		self.logger.Info().Msg("Closing logger")
-	}
+func (self Logger) Close(ctx context.Context) error { // nolint
+	self.logger.Info().Msg("Closing logger")
 
 	self.Flush()
 

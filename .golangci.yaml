@@ -263,6 +263,8 @@ linters-settings:
         disabled: true
       - name: blank-imports
         disabled: true
+      - name: nested-structs
+        disabled: true
 
   # Checks for struct tags correctness.
   tagliatelle:
@@ -358,6 +360,9 @@ issues:
 
     - linters: [govet]
       text: "pointer bytes could be"
+
+    - linters: [wsl]
+      text: "anonymous switch statements should never be cuddled"
 
   # Independently of option `exclude` we use default exclude patterns,
   # it can be disabled by this option.
