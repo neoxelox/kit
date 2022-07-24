@@ -16,7 +16,7 @@ type ExceptionHandler struct {
 }
 
 func NewExceptionHandler(logger Logger, config ExceptionHandlerConfig) *ExceptionHandler {
-	logger.SetLogger(logger.Logger().With().Str("layer", "exception_handler").Logger())
+	logger.SetFile()
 
 	return &ExceptionHandler{
 		logger: logger,

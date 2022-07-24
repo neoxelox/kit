@@ -246,6 +246,12 @@ func (self _utils) Deadline(ctx context.Context, work func(exceeded <-chan struc
 func (self _utils) Retry(
 	attempts int, delay time.Duration,
 	classifier retrier.Classifier, work func(attempt int) error) error {
+	// Go resiliency package does not count the first execution as an attempt
+	attempts--
+	if attempts < 0 {
+		return nil
+	}
+
 	attempt := 1
 
 	// nolint
@@ -261,6 +267,12 @@ func (self _utils) Retry(
 func (self _utils) ExponentialRetry(
 	attempts int, initialDelay time.Duration, limitDelay time.Duration,
 	classifier retrier.Classifier, work func(attempt int) error) error {
+	// Go resiliency package does not count the first execution as an attempt
+	attempts--
+	if attempts < 0 {
+		return nil
+	}
+
 	attempt := 1
 
 	// nolint

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"time"
 
 	"github.com/jackc/pgx/v4"
@@ -14,9 +15,10 @@ import (
 )
 
 const (
-	_LOGGER_APP_FIELD_NAME = "app"
-	_LOGGER_WRITER_SIZE    = 1000
-	_LOGGER_POLL_INTERVAL  = 10 * time.Millisecond
+	_LOGGER_APP_FIELD_NAME  = "app"
+	_LOGGER_FILE_FIELD_NAME = "file"
+	_LOGGER_WRITER_SIZE     = 1000
+	_LOGGER_POLL_INTERVAL   = 10 * time.Millisecond
 )
 
 type LoggerConfig struct {
@@ -44,7 +46,6 @@ func NewLogger(config LoggerConfig) *Logger {
 
 	zerolog.TimeFieldFormat = timeFieldFormat
 	zerolog.TimestampFieldName = "timestamp"
-	zerolog.CallerSkipFrameCount = 3
 
 	level := zerolog.DebugLevel
 	if config.Environment != Environments.Development {
@@ -60,6 +61,7 @@ func NewLogger(config LoggerConfig) *Logger {
 			config.App, zerolog.MessageFieldName, missed)
 	})
 
+	// Do not use Caller hook as runtime.Caller makes the logger up to 2.6x slower
 	return &Logger{
 		logger:  zerolog.New(out).With().Str(_LOGGER_APP_FIELD_NAME, config.App).Timestamp().Logger().Level(level),
 		config:  config,
@@ -95,6 +97,12 @@ func (self Logger) Close(ctx context.Context) error { // nolint
 	}
 
 	return writer.Close() // nolint
+}
+
+func (self *Logger) SetFile() {
+	if _, file, _, ok := runtime.Caller(1); ok {
+		self.logger = self.logger.With().Str(_LOGGER_FILE_FIELD_NAME, file).Logger()
+	}
 }
 
 func (self Logger) Output() io.Writer {

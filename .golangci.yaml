@@ -58,6 +58,10 @@ linters-settings:
     # The maximal code complexity to report.
     max-complexity: 30
 
+  dogsled:
+    # Checks assignments with too many blank identifiers.
+    max-blank-identifiers: 3
+
   # Checks for duplicated code.
   dupl:
     # Tokens count to trigger issue.

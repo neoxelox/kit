@@ -44,7 +44,7 @@ type Migrator struct {
 }
 
 func NewMigrator(ctx context.Context, logger Logger, config MigratorConfig) (*Migrator, error) {
-	logger.SetLogger(logger.Logger().With().Str("layer", "migrator").Logger())
+	logger.SetFile()
 
 	migrationsPath := _MIGRATOR_DEFAULT_MIGRATIONS_PATH
 	if config.MigrationsPath != nil {

@@ -14,7 +14,7 @@ type Binder struct {
 }
 
 func NewBinder(logger Logger, config BinderConfig) *Binder {
-	logger.SetLogger(logger.Logger().With().Str("layer", "binder").Logger())
+	logger.SetFile()
 
 	return &Binder{
 		logger: logger,
