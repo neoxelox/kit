@@ -11,16 +11,16 @@ type ExceptionHandlerConfig struct {
 }
 
 type ExceptionHandler struct {
-	config ExceptionHandlerConfig
-	logger Logger
+	config   ExceptionHandlerConfig
+	observer Observer
 }
 
-func NewExceptionHandler(logger Logger, config ExceptionHandlerConfig) *ExceptionHandler {
-	logger.SetFile()
+func NewExceptionHandler(observer Observer, config ExceptionHandlerConfig) *ExceptionHandler {
+	observer.Anchor()
 
 	return &ExceptionHandler{
-		logger: logger,
-		config: config,
+		observer: observer,
+		config:   config,
 	}
 }
 
@@ -42,8 +42,7 @@ func (self *ExceptionHandler) Handle(err error, ctx echo.Context) {
 	}
 
 	if exc.status >= http.StatusInternalServerError {
-		// TODO: send to Sentry and/or New Relic
-		self.logger.Error(exc)
+		self.observer.Error(exc)
 	}
 
 	if ctx.Response().Committed {
@@ -61,6 +60,6 @@ func (self *ExceptionHandler) Handle(err error, ctx echo.Context) {
 	}
 
 	if err != nil {
-		self.logger.Error(Errors.ErrExceptionHandlerGeneric().Withf("cannot return exception %s", exc).Wrap(err))
+		self.observer.Error(Errors.ErrExceptionHandlerGeneric().Withf("cannot return exception %s", exc).Wrap(err))
 	}
 }

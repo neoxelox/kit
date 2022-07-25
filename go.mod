@@ -6,6 +6,7 @@ require (
 	github.com/aodin/date v0.0.0-20160219192542-c5f6146fc644
 	github.com/cockroachdb/errors v1.9.0
 	github.com/eapache/go-resiliency v1.3.0
+	github.com/getsentry/sentry-go v0.13.0
 	github.com/golang-migrate/migrate/v4 v4.15.2
 	github.com/jackc/pgx/v4 v4.16.1
 	github.com/labstack/echo/v4 v4.5.0
@@ -17,7 +18,6 @@ require (
 require (
 	github.com/cockroachdb/logtags v0.0.0-20211118104740-dabe8e521a4f // indirect
 	github.com/cockroachdb/redact v1.1.3 // indirect
-	github.com/getsentry/sentry-go v0.13.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect

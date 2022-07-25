@@ -8,18 +8,18 @@ type BinderConfig struct {
 }
 
 type Binder struct {
-	binder echo.DefaultBinder
-	config BinderConfig
-	logger Logger
+	binder   echo.DefaultBinder
+	config   BinderConfig
+	observer Observer
 }
 
-func NewBinder(logger Logger, config BinderConfig) *Binder {
-	logger.SetFile()
+func NewBinder(observer Observer, config BinderConfig) *Binder {
+	observer.Anchor()
 
 	return &Binder{
-		logger: logger,
-		config: config,
-		binder: echo.DefaultBinder{},
+		observer: observer,
+		config:   config,
+		binder:   echo.DefaultBinder{},
 	}
 }
 

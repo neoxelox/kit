@@ -6,6 +6,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// TODO: Wrap and WrapAs just call WithDepth +1
+// TODO: dedup error messages
+
 type Error struct {
 	inner      error
 	identifier string

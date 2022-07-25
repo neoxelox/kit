@@ -38,13 +38,13 @@ type MigratorConfig struct {
 
 type Migrator struct {
 	config   MigratorConfig
-	logger   Logger
+	observer Observer
 	migrator migrate.Migrate
 	done     chan struct{}
 }
 
-func NewMigrator(ctx context.Context, logger Logger, config MigratorConfig) (*Migrator, error) {
-	logger.SetFile()
+func NewMigrator(ctx context.Context, observer Observer, config MigratorConfig) (*Migrator, error) {
+	observer.Anchor()
 
 	migrationsPath := _MIGRATOR_DEFAULT_MIGRATIONS_PATH
 	if config.MigrationsPath != nil {
@@ -79,7 +79,7 @@ func NewMigrator(ctx context.Context, logger Logger, config MigratorConfig) (*Mi
 		return Utils.ExponentialRetry(attempts, initialDelay, limitDelay, nil, func(attempt int) error {
 			var err error
 
-			logger.Infof("Trying to connect to the database %d/%d", attempt, attempts)
+			observer.Infof("Trying to connect to the database %d/%d", attempt, attempts)
 
 			migrator, err = migrate.New(migrationsPath, dsn)
 			if err != nil {
@@ -97,15 +97,15 @@ func NewMigrator(ctx context.Context, logger Logger, config MigratorConfig) (*Mi
 		return nil, Errors.ErrMigratorGeneric().Wrap(err)
 	}
 
-	logger.Info("Connected to the database")
+	observer.Info("Connected to the database")
 
-	migrator.Log = *newMigrateLogger(logger)
+	migrator.Log = *newMigrateLogger(observer.Logger)
 
 	done := make(chan struct{}, 1)
 	close(done)
 
 	return &Migrator{
-		logger:   logger,
+		observer: observer,
 		config:   config,
 		migrator: *migrator,
 		done:     done,
@@ -139,7 +139,7 @@ func (self *Migrator) Assert(ctx context.Context, schemaVersion int) error {
 					schemaVersion, currentSchemaVersion)
 			}
 
-			self.logger.Infof("Desired schema version %d asserted", schemaVersion)
+			self.observer.Infof("Desired schema version %d asserted", schemaVersion)
 
 			return nil
 		}()
@@ -185,7 +185,7 @@ func (self *Migrator) Apply(ctx context.Context, schemaVersion int) error {
 			}
 
 			if currentSchemaVersion == uint(schemaVersion) {
-				self.logger.Info("No migrations to apply")
+				self.observer.Info("No migrations to apply")
 
 				return nil
 			}
@@ -195,14 +195,14 @@ func (self *Migrator) Apply(ctx context.Context, schemaVersion int) error {
 					schemaVersion, currentSchemaVersion)
 			}
 
-			self.logger.Infof("%d migrations to be applied", schemaVersion-int(currentSchemaVersion))
+			self.observer.Infof("%d migrations to be applied", schemaVersion-int(currentSchemaVersion))
 
 			err = self.migrator.Migrate(uint(schemaVersion))
 			if err != nil {
 				return Errors.ErrMigratorGeneric().WrapAs(err)
 			}
 
-			self.logger.Info("Applied all migrations successfully")
+			self.observer.Info("Applied all migrations successfully")
 
 			return nil
 		}()
@@ -244,7 +244,7 @@ func (self *Migrator) Rollback(ctx context.Context, schemaVersion int) error {
 			}
 
 			if bad {
-				self.logger.Infof("Current schema version %d is dirty, ignoring", currentSchemaVersion)
+				self.observer.Infof("Current schema version %d is dirty, ignoring", currentSchemaVersion)
 
 				err = self.migrator.Force(int(currentSchemaVersion))
 				if err != nil {
@@ -253,7 +253,7 @@ func (self *Migrator) Rollback(ctx context.Context, schemaVersion int) error {
 			}
 
 			if currentSchemaVersion == uint(schemaVersion) {
-				self.logger.Info("No migrations to rollback")
+				self.observer.Info("No migrations to rollback")
 
 				return nil
 			}
@@ -263,14 +263,14 @@ func (self *Migrator) Rollback(ctx context.Context, schemaVersion int) error {
 					schemaVersion, currentSchemaVersion)
 			}
 
-			self.logger.Infof("%d migrations to be rollbacked", int(currentSchemaVersion)-schemaVersion)
+			self.observer.Infof("%d migrations to be rollbacked", int(currentSchemaVersion)-schemaVersion)
 
 			err = self.migrator.Migrate(uint(schemaVersion))
 			if err != nil {
 				return Errors.ErrMigratorGeneric().WrapAs(err)
 			}
 
-			self.logger.Info("Rollbacked all migrations successfully")
+			self.observer.Info("Rollbacked all migrations successfully")
 
 			return nil
 		}()
@@ -296,29 +296,39 @@ func (self *Migrator) Rollback(ctx context.Context, schemaVersion int) error {
 	}
 }
 
-func (self *Migrator) Close(ctx context.Context) error { // nolint
-	self.logger.Info("Closing migrator")
+func (self *Migrator) Close(ctx context.Context) error {
+	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+		self.observer.Info("Closing migrator")
 
-	select {
-	case self.migrator.GracefulStop <- true:
+		select {
+		case self.migrator.GracefulStop <- true:
+		default:
+		}
+
+		<-self.done
+
+		err, errD := self.migrator.Close()
+		if errD != nil && _DB_ALREADY_CLOSED_ERR_REGEX.MatchString(errD.Error()) {
+			errD = nil
+		}
+
+		err = Utils.CombineErrors(err, errD)
+		if err != nil {
+			return Errors.ErrMigratorGeneric().WrapAs(err)
+		}
+
+		self.observer.Info("Closed migrator")
+
+		return nil
+	})
+	switch {
+	case err == nil:
+		return nil
+	case Errors.ErrDeadlineExceeded().Is(err):
+		return Errors.ErrMigratorTimedOut()
 	default:
-	}
-
-	<-self.done
-
-	err, errD := self.migrator.Close()
-	if errD != nil && _DB_ALREADY_CLOSED_ERR_REGEX.MatchString(errD.Error()) {
-		errD = nil
-	}
-
-	err = Utils.CombineErrors(err, errD)
-	if err != nil {
 		return Errors.ErrMigratorGeneric().Wrap(err)
 	}
-
-	self.logger.Info("Closed migrator")
-
-	return nil
 }
 
 type _migrateLogger struct {

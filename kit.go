@@ -49,19 +49,27 @@ var Environments = _environments{
 }
 
 type _errors struct {
+	ErrLoggerGeneric           func() *Error
+	ErrLoggerTimedOut          func() *Error
 	ErrBinderGeneric           func() *Error
 	ErrExceptionHandlerGeneric func() *Error
 	ErrMigratorGeneric         func() *Error
 	ErrMigratorTimedOut        func() *Error
+	ErrObserverGeneric         func() *Error
+	ErrObserverTimedOut        func() *Error
 	ErrDeadlineExceeded        func() *Error
 }
 
 // Errors contains the builtin errors.
 var Errors = _errors{
+	ErrLoggerGeneric:           NewError("logger failed"),
+	ErrLoggerTimedOut:          NewError("logger timed out"),
 	ErrBinderGeneric:           NewError("binder failed"),
 	ErrExceptionHandlerGeneric: NewError("error handler failed"),
 	ErrMigratorGeneric:         NewError("migrator failed"),
 	ErrMigratorTimedOut:        NewError("migrator timed out"),
+	ErrObserverGeneric:         NewError("observer failed"),
+	ErrObserverTimedOut:        NewError("observer timed out"),
 	ErrDeadlineExceeded:        NewError("deadline exceeded"),
 }
 

@@ -15,17 +15,20 @@ import (
 )
 
 const (
-	_LOGGER_APP_FIELD_NAME  = "app"
-	_LOGGER_FILE_FIELD_NAME = "file"
-	_LOGGER_WRITER_SIZE     = 1000
-	_LOGGER_POLL_INTERVAL   = 10 * time.Millisecond
+	_LOGGER_LEVEL_FIELD_NAME     = "level"
+	_LOGGER_MESSAGE_FIELD_NAME   = "message"
+	_LOGGER_APP_FIELD_NAME       = "app"
+	_LOGGER_FILE_FIELD_NAME      = "file"
+	_LOGGER_TIMESTAMP_FIELD_NAME = "timestamp"
+	_LOGGER_WRITER_SIZE          = 1000
+	_LOGGER_POLL_INTERVAL        = 10 * time.Millisecond
+	_LOGGER_FLUSH_DELAY          = _LOGGER_POLL_INTERVAL * 10
 )
 
 type LoggerConfig struct {
-	Environment     string
-	App             string
-	TimeFieldFormat *string
-	Level           *zerolog.Level
+	Environment string
+	AppName     string
+	Level       *zerolog.Level
 }
 
 type Logger struct {
@@ -39,13 +42,10 @@ type Logger struct {
 }
 
 func NewLogger(config LoggerConfig) *Logger {
-	timeFieldFormat := zerolog.TimeFormatUnixMicro
-	if config.TimeFieldFormat != nil {
-		timeFieldFormat = *config.TimeFieldFormat
-	}
-
-	zerolog.TimeFieldFormat = timeFieldFormat
-	zerolog.TimestampFieldName = "timestamp"
+	zerolog.LevelFieldName = _LOGGER_LEVEL_FIELD_NAME
+	zerolog.MessageFieldName = _LOGGER_MESSAGE_FIELD_NAME
+	zerolog.TimestampFieldName = _LOGGER_TIMESTAMP_FIELD_NAME
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 
 	level := zerolog.DebugLevel
 	if config.Environment != Environments.Development {
@@ -56,18 +56,26 @@ func NewLogger(config LoggerConfig) *Logger {
 		level = *config.Level
 	}
 
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		file = "logger.go"
+	}
+
 	out := diode.NewWriter(os.Stdout, _LOGGER_WRITER_SIZE, _LOGGER_POLL_INTERVAL, func(missed int) {
-		fmt.Fprintf(os.Stdout, "{\"%s\":\"%s\",\"%s\":\"Logger dropped %d messages\"}\n", _LOGGER_APP_FIELD_NAME,
-			config.App, zerolog.MessageFieldName, missed)
+		fmt.Fprintf(os.Stdout,
+			"{\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":%d,\"%s\":\"Logger dropped %d messages\"}\n",
+			zerolog.LevelFieldName, zerolog.InfoLevel, _LOGGER_APP_FIELD_NAME,
+			config.AppName, _LOGGER_FILE_FIELD_NAME, file, zerolog.TimestampFieldName,
+			time.Now().Unix(), zerolog.MessageFieldName, missed)
 	})
 
 	// Do not use Caller hook as runtime.Caller makes the logger up to 2.6x slower
 	return &Logger{
-		logger:  zerolog.New(out).With().Str(_LOGGER_APP_FIELD_NAME, config.App).Timestamp().Logger().Level(level),
+		logger:  zerolog.New(out).With().Str(_LOGGER_APP_FIELD_NAME, config.AppName).Timestamp().Logger().Level(level),
 		config:  config,
 		level:   level,
 		out:     out,
-		prefix:  config.App,
+		prefix:  config.AppName,
 		header:  "",
 		verbose: level == zerolog.DebugLevel,
 	}
@@ -81,26 +89,60 @@ func (self *Logger) SetLogger(l zerolog.Logger) {
 	self.logger = l
 }
 
-func (self Logger) Flush() {
-	os.Stdout.Sync()
-	os.Stderr.Sync()
-}
+func (self Logger) Flush(ctx context.Context) error {
+	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+		time.Sleep(_LOGGER_FLUSH_DELAY)
+		os.Stdout.Sync()
+		os.Stderr.Sync()
 
-func (self Logger) Close(ctx context.Context) error { // nolint
-	self.logger.Info().Msg("Closing logger")
-
-	self.Flush()
-
-	writer, ok := self.out.(diode.Writer)
-	if !ok {
-		panic("logger writer is not diode")
+		return nil
+	})
+	switch {
+	case err == nil:
+		return nil
+	case Errors.ErrDeadlineExceeded().Is(err):
+		return Errors.ErrLoggerTimedOut()
+	default:
+		return Errors.ErrLoggerGeneric().Wrap(err)
 	}
-
-	return writer.Close() // nolint
 }
 
-func (self *Logger) SetFile() {
-	if _, file, _, ok := runtime.Caller(1); ok {
+func (self Logger) Close(ctx context.Context) error {
+	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+		self.logger.Info().Msg("Closing logger")
+
+		err := self.Flush(ctx)
+		if err != nil {
+			return Errors.ErrLoggerGeneric().WrapAs(err)
+		}
+
+		writer, ok := self.out.(diode.Writer)
+		if !ok {
+			panic("logger writer is not diode")
+		}
+
+		err = writer.Close()
+		if err != nil {
+			return Errors.ErrLoggerGeneric().WrapAs(err)
+		}
+
+		self.logger.Info().Msg("Closed logger")
+
+		return nil
+	})
+	switch {
+	case err == nil:
+		return nil
+	case Errors.ErrDeadlineExceeded().Is(err):
+		return Errors.ErrLoggerTimedOut()
+	default:
+		return Errors.ErrLoggerGeneric().Wrap(err)
+	}
+}
+
+// TODO: dedup file field
+func (self *Logger) SetFile(frames int) {
+	if _, file, _, ok := runtime.Caller(frames); ok {
 		self.logger = self.logger.With().Str(_LOGGER_FILE_FIELD_NAME, file).Logger()
 	}
 }
@@ -207,18 +249,15 @@ func (self Logger) Error(i ...interface{}) {
 		return
 	}
 
-	if i == nil || len(i) < 1 || i[0] == nil {
-		return
-	}
-
 	for _, ie := range i {
 		switch err := ie.(type) {
+		case nil:
 		case *Error:
 			fmt.Printf("%+v\n", err.Unwrap()) // nolint
 		case *Exception:
 			fmt.Printf("%+v\n", err.Unwrap()) // nolint
 		default:
-			fmt.Printf("%+v\n", ie) // nolint
+			fmt.Printf("%+v\n", err) // nolint
 		}
 	}
 }
