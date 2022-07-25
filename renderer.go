@@ -12,9 +12,10 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-const _RENDERER_DEFAULT_TEMPLATES_PATH = "./templates"
-
-var _RENDERER_DEFAULT_TEMPLATE_EXTENSIONS = regexp.MustCompile(`^.*\.(html|txt|md)$`)
+var (
+	_RENDERER_DEFAULT_TEMPLATES_PATH      = "./templates"
+	_RENDERER_DEFAULT_TEMPLATE_EXTENSIONS = regexp.MustCompile(`^.*\.(html|txt|md)$`)
+)
 
 type RendererConfig struct {
 	TemplatesPath      *string
@@ -30,20 +31,19 @@ type Renderer struct {
 func NewRenderer(observer Observer, config RendererConfig) *Renderer {
 	observer.Anchor()
 
-	templatesPath := _RENDERER_DEFAULT_TEMPLATES_PATH
-	if config.TemplatesPath != nil {
-		templatesPath = *config.TemplatesPath
+	if config.TemplatesPath == nil {
+		config.TemplatesPath = &_RENDERER_DEFAULT_TEMPLATES_PATH
 	}
 
-	templateExtensions := _RENDERER_DEFAULT_TEMPLATE_EXTENSIONS
-	if config.TemplateExtensions != nil {
-		templateExtensions = config.TemplateExtensions
+	if config.TemplateExtensions == nil {
+		config.TemplateExtensions = _RENDERER_DEFAULT_TEMPLATE_EXTENSIONS
 	}
+
+	*config.TemplatesPath = filepath.Clean(*config.TemplatesPath)
 
 	renderer := template.New("")
-	templatesPath = filepath.Clean(templatesPath)
 
-	err := filepath.WalkDir(templatesPath, func(path string, info fs.DirEntry, err error) error {
+	err := filepath.WalkDir(*config.TemplatesPath, func(path string, info fs.DirEntry, err error) error {
 		if err != nil {
 			return Errors.ErrRendererGeneric().WrapAs(err)
 		}
@@ -52,9 +52,9 @@ func NewRenderer(observer Observer, config RendererConfig) *Renderer {
 			return nil
 		}
 
-		name := path[len(templatesPath)+1:]
+		name := path[len(*config.TemplatesPath)+1:]
 
-		if !templateExtensions.MatchString(name) {
+		if !config.TemplateExtensions.MatchString(name) {
 			return nil
 		}
 

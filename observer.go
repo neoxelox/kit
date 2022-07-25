@@ -10,7 +10,12 @@ import (
 	"github.com/rs/zerolog"
 )
 
-const _OBSERVER_DEFAULT_SENTRY_FLUSH_TIMEOUT = 2 * time.Second
+var (
+	_OBSERVER_DEFAULT_RETRY_ATTEMPTS       = 1
+	_OBSERVER_DEFAULT_RETRY_INITIAL_DELAY  = 0 * time.Second
+	_OBSERVER_DEFAULT_RETRY_LIMIT_DELAY    = 0 * time.Second
+	_OBSERVER_DEFAULT_SENTRY_FLUSH_TIMEOUT = 2 * time.Second
+)
 
 type ObserverRetryConfig struct {
 	Attempts     int
@@ -37,43 +42,44 @@ type Observer struct {
 }
 
 func NewObserver(ctx context.Context, config ObserverConfig) (*Observer, error) {
+	if config.RetryConfig == nil {
+		config.RetryConfig = &ObserverRetryConfig{
+			Attempts:     _OBSERVER_DEFAULT_RETRY_ATTEMPTS,
+			InitialDelay: _OBSERVER_DEFAULT_RETRY_INITIAL_DELAY,
+			LimitDelay:   _OBSERVER_DEFAULT_RETRY_LIMIT_DELAY,
+		}
+	}
+
 	logger := NewLogger(LoggerConfig{
 		Environment: config.Environment,
 		AppName:     config.AppName,
 		Level:       config.Level,
 	})
 
-	attempts := 1
-	initialDelay := 0 * time.Second
-	limitDelay := 0 * time.Second
-	if config.RetryConfig != nil { // nolint
-		attempts = config.RetryConfig.Attempts
-		initialDelay = config.RetryConfig.InitialDelay
-		limitDelay = config.RetryConfig.LimitDelay
-	}
-
 	if config.SentryConfig != nil {
 		// TODO: only retry on specific errors
 		err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
-			return Utils.ExponentialRetry(attempts, initialDelay, limitDelay, nil, func(attempt int) error {
-				logger.Infof("Trying to connect to the Sentry service %d/%d", attempt, attempts)
+			return Utils.ExponentialRetry(
+				config.RetryConfig.Attempts, config.RetryConfig.InitialDelay, config.RetryConfig.LimitDelay,
+				nil, func(attempt int) error {
+					logger.Infof("Trying to connect to the Sentry service %d/%d", attempt, config.RetryConfig.Attempts)
 
-				err := sentry.Init(sentry.ClientOptions{
-					Dsn:              config.SentryConfig.Dsn,
-					Environment:      config.Environment,
-					Release:          config.Release,
-					ServerName:       config.AppName,
-					Debug:            false,
-					AttachStacktrace: false,
-					SampleRate:       1.0, // Error events
-					TracesSampleRate: 0,   // Transaction events. TODO: activate
+					err := sentry.Init(sentry.ClientOptions{
+						Dsn:              config.SentryConfig.Dsn,
+						Environment:      config.Environment,
+						Release:          config.Release,
+						ServerName:       config.AppName,
+						Debug:            false,
+						AttachStacktrace: false, // Already done by errors package
+						SampleRate:       1.0,   // Error events
+						TracesSampleRate: 0,     // Transaction events. TODO: activate?
+					})
+					if err != nil {
+						return Errors.ErrObserverGeneric().WrapAs(err)
+					}
+
+					return nil
 				})
-				if err != nil {
-					return Errors.ErrObserverGeneric().WrapAs(err)
-				}
-
-				return nil
-			})
 		})
 		switch {
 		case err == nil:
@@ -184,9 +190,11 @@ func (self Observer) Close(ctx context.Context) error {
 			return Errors.ErrObserverGeneric().WrapAs(err)
 		}
 
-		// Dummy log in order to mantain consistency although Sentry has no close() method
-		self.Logger.Info("Closing Sentry service")
-		self.Logger.Info("Closed Sentry service")
+		if self.config.SentryConfig != nil {
+			// Dummy log in order to mantain consistency although Sentry has no close() method
+			self.Logger.Info("Closing Sentry service")
+			self.Logger.Info("Closed Sentry service")
+		}
 
 		err = self.Logger.Close(ctx)
 		if err != nil {

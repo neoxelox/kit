@@ -25,6 +25,11 @@ const (
 	_LOGGER_FLUSH_DELAY          = _LOGGER_POLL_INTERVAL * 10
 )
 
+var (
+	_LOGGER_DEFAULT_DEV_LEVEL  = zerolog.DebugLevel
+	_LOGGER_DEFAULT_PROD_LEVEL = zerolog.InfoLevel
+)
+
 type LoggerConfig struct {
 	Environment string
 	AppName     string
@@ -42,19 +47,18 @@ type Logger struct {
 }
 
 func NewLogger(config LoggerConfig) *Logger {
+	if config.Level == nil {
+		if config.Environment != Environments.Development {
+			config.Level = &_LOGGER_DEFAULT_PROD_LEVEL
+		} else {
+			config.Level = &_LOGGER_DEFAULT_DEV_LEVEL
+		}
+	}
+
 	zerolog.LevelFieldName = _LOGGER_LEVEL_FIELD_NAME
 	zerolog.MessageFieldName = _LOGGER_MESSAGE_FIELD_NAME
 	zerolog.TimestampFieldName = _LOGGER_TIMESTAMP_FIELD_NAME
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-
-	level := zerolog.DebugLevel
-	if config.Environment != Environments.Development {
-		level = zerolog.InfoLevel
-	}
-
-	if config.Level != nil {
-		level = *config.Level
-	}
 
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
@@ -71,13 +75,17 @@ func NewLogger(config LoggerConfig) *Logger {
 
 	// Do not use Caller hook as runtime.Caller makes the logger up to 2.6x slower
 	return &Logger{
-		logger:  zerolog.New(out).With().Str(_LOGGER_APP_FIELD_NAME, config.AppName).Timestamp().Logger().Level(level),
+		logger: zerolog.New(out).With().
+			Str(_LOGGER_APP_FIELD_NAME, config.AppName).
+			Timestamp().
+			Logger().
+			Level(*config.Level),
 		config:  config,
-		level:   level,
+		level:   *config.Level,
 		out:     out,
 		prefix:  config.AppName,
 		header:  "",
-		verbose: level == zerolog.DebugLevel,
+		verbose: *config.Level == zerolog.DebugLevel,
 	}
 }
 
