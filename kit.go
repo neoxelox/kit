@@ -49,6 +49,7 @@ var Environments = _environments{
 }
 
 type _errors struct {
+	ErrDeadlineExceeded        func() *Error
 	ErrLoggerGeneric           func() *Error
 	ErrLoggerTimedOut          func() *Error
 	ErrBinderGeneric           func() *Error
@@ -57,11 +58,12 @@ type _errors struct {
 	ErrMigratorTimedOut        func() *Error
 	ErrObserverGeneric         func() *Error
 	ErrObserverTimedOut        func() *Error
-	ErrDeadlineExceeded        func() *Error
+	ErrSerializerGeneric       func() *Error
 }
 
 // Errors contains the builtin errors.
 var Errors = _errors{
+	ErrDeadlineExceeded:        NewError("deadline exceeded"),
 	ErrLoggerGeneric:           NewError("logger failed"),
 	ErrLoggerTimedOut:          NewError("logger timed out"),
 	ErrBinderGeneric:           NewError("binder failed"),
@@ -70,7 +72,7 @@ var Errors = _errors{
 	ErrMigratorTimedOut:        NewError("migrator timed out"),
 	ErrObserverGeneric:         NewError("observer failed"),
 	ErrObserverTimedOut:        NewError("observer timed out"),
-	ErrDeadlineExceeded:        NewError("deadline exceeded"),
+	ErrSerializerGeneric:       NewError("serializer failed"),
 }
 
 type _exceptions struct {

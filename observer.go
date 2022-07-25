@@ -93,7 +93,7 @@ func NewObserver(ctx context.Context, config ObserverConfig) (*Observer, error) 
 }
 
 func (self *Observer) Anchor() {
-	self.Logger.SetFile(2)
+	self.Logger.SetFile(2) // nolint
 }
 
 func (self Observer) Error(i ...interface{}) {
