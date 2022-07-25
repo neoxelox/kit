@@ -31,7 +31,6 @@ import (
 // 	_DEFAULT_IMAGES_PATH    = _DEFAULT_ASSETS_PATH + "/images"
 // 	_DEFAULT_SCRIPTS_PATH   = _DEFAULT_ASSETS_PATH + "/scripts"
 // 	_DEFAULT_STYLES_PATH    = _DEFAULT_ASSETS_PATH + "/styles"
-// 	_DEFAULT_TEMPLATES_PATH = "./templates"
 
 // 	_BASE_KEY _key = "kit"
 // 	// TODO: Move this to the correct site
@@ -59,6 +58,7 @@ type _errors struct {
 	ErrObserverGeneric         func() *Error
 	ErrObserverTimedOut        func() *Error
 	ErrSerializerGeneric       func() *Error
+	ErrRendererGeneric         func() *Error
 }
 
 // Errors contains the builtin errors.
@@ -73,6 +73,7 @@ var Errors = _errors{
 	ErrObserverGeneric:         NewError("observer failed"),
 	ErrObserverTimedOut:        NewError("observer timed out"),
 	ErrSerializerGeneric:       NewError("serializer failed"),
+	ErrRendererGeneric:         NewError("renderer failed"),
 }
 
 type _exceptions struct {
