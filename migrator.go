@@ -3,6 +3,7 @@ package kit
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -53,7 +54,7 @@ func NewMigrator(ctx context.Context, observer Observer, config MigratorConfig) 
 		config.MigrationsPath = &_MIGRATOR_DEFAULT_MIGRATIONS_PATH
 	}
 
-	*config.MigrationsPath = fmt.Sprintf("file://%s", *config.MigrationsPath)
+	*config.MigrationsPath = fmt.Sprintf("file://%s", filepath.Clean(*config.MigrationsPath))
 
 	if config.RetryConfig == nil {
 		config.RetryConfig = &MigratorRetryConfig{

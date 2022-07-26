@@ -22,20 +22,9 @@ import (
 	"github.com/scylladb/go-set/strset"
 )
 
-// type _key string
+type _ctxKey string
 
-// const (
-// 	// TODO: Move this to the correct site
-// 	_DEFAULT_ASSETS_PATH    = "./assets"
-// 	_DEFAULT_FILES_PATH     = _DEFAULT_ASSETS_PATH + "/files"
-// 	_DEFAULT_IMAGES_PATH    = _DEFAULT_ASSETS_PATH + "/images"
-// 	_DEFAULT_SCRIPTS_PATH   = _DEFAULT_ASSETS_PATH + "/scripts"
-// 	_DEFAULT_STYLES_PATH    = _DEFAULT_ASSETS_PATH + "/styles"
-
-// 	_BASE_KEY _key = "kit"
-// 	// TODO: Move this to the correct site
-// 	_DATABASE_TRANSACTION_KEY _key = ":database:transaction"
-// )
+const _BASE_CTX_KEY _ctxKey = "kit:"
 
 type _environments struct {
 	Development string
@@ -59,6 +48,7 @@ type _errors struct {
 	ErrObserverTimedOut        func() *Error
 	ErrSerializerGeneric       func() *Error
 	ErrRendererGeneric         func() *Error
+	ErrLocalizerGeneric        func() *Error
 }
 
 // Errors contains the builtin errors.
@@ -74,6 +64,7 @@ var Errors = _errors{
 	ErrObserverTimedOut:        NewError("observer timed out"),
 	ErrSerializerGeneric:       NewError("serializer failed"),
 	ErrRendererGeneric:         NewError("renderer failed"),
+	ErrLocalizerGeneric:        NewError("localizer failed"),
 }
 
 type _exceptions struct {

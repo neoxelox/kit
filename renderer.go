@@ -28,7 +28,7 @@ type Renderer struct {
 	renderer *template.Template
 }
 
-func NewRenderer(observer Observer, config RendererConfig) *Renderer {
+func NewRenderer(observer Observer, config RendererConfig) (*Renderer, error) {
 	observer.Anchor()
 
 	if config.TemplatesPath == nil {
@@ -52,11 +52,11 @@ func NewRenderer(observer Observer, config RendererConfig) *Renderer {
 			return nil
 		}
 
-		name := path[len(*config.TemplatesPath)+1:]
-
-		if !config.TemplateExtensions.MatchString(name) {
+		if !config.TemplateExtensions.MatchString(info.Name()) {
 			return nil
 		}
+
+		name := path[len(*config.TemplatesPath)+1:]
 
 		file, err := ioutil.ReadFile(path)
 		if err != nil {
@@ -71,14 +71,14 @@ func NewRenderer(observer Observer, config RendererConfig) *Renderer {
 		return nil
 	})
 	if err != nil {
-		panic(Errors.ErrRendererGeneric().Wrap(err))
+		return nil, Errors.ErrRendererGeneric().Wrap(err)
 	}
 
 	return &Renderer{
 		config:   config,
 		observer: observer,
 		renderer: renderer,
-	}
+	}, nil
 }
 
 func (self *Renderer) Render(w io.Writer, name string, data interface{}, c echo.Context) error { // nolint
