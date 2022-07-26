@@ -103,7 +103,7 @@ func NewMigrator(ctx context.Context, observer Observer, config MigratorConfig) 
 
 	observer.Info("Connected to the database")
 
-	migrator.Log = *newMigrateLogger(observer.Logger)
+	migrator.Log = *_newMigrateLogger(observer.Logger)
 
 	done := make(chan struct{}, 1)
 	close(done)
@@ -339,7 +339,7 @@ type _migrateLogger struct {
 	logger Logger
 }
 
-func newMigrateLogger(logger Logger) *_migrateLogger {
+func _newMigrateLogger(logger Logger) *_migrateLogger {
 	return &_migrateLogger{
 		logger: logger,
 	}

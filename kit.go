@@ -49,6 +49,8 @@ type _errors struct {
 	ErrSerializerGeneric       func() *Error
 	ErrRendererGeneric         func() *Error
 	ErrLocalizerGeneric        func() *Error
+	ErrServerGeneric           func() *Error
+	ErrServerTimedOut          func() *Error
 }
 
 // Errors contains the builtin errors.
@@ -65,6 +67,8 @@ var Errors = _errors{
 	ErrSerializerGeneric:       NewError("serializer failed"),
 	ErrRendererGeneric:         NewError("renderer failed"),
 	ErrLocalizerGeneric:        NewError("localizer failed"),
+	ErrServerGeneric:           NewError("server failed"),
+	ErrServerTimedOut:          NewError("server timed out"),
 }
 
 type _exceptions struct {

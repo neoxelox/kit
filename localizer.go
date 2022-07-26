@@ -45,7 +45,7 @@ func NewLocalizer(observer Observer, config LocalizerConfig) (*Localizer, error)
 
 	*config.LocalesPath = filepath.Clean(*config.LocalesPath)
 
-	copiesByLang, err := getCopies(&observer, *config.LocalesPath, config.LocaleExtensions)
+	copiesByLang, err := _getCopies(&observer, *config.LocalesPath, config.LocaleExtensions)
 	if err != nil {
 		return nil, Errors.ErrLocalizerGeneric().Wrap(err)
 	}
@@ -57,7 +57,7 @@ func NewLocalizer(observer Observer, config LocalizerConfig) (*Localizer, error)
 	}, nil
 }
 
-func getCopies(
+func _getCopies(
 	observer *Observer, localesPath string,
 	localeExtensions *regexp.Regexp) (map[language.Tag]map[string]string, error) {
 	copiesByLang := make(map[language.Tag]map[string]string)
@@ -119,7 +119,7 @@ func getCopies(
 }
 
 func (self *Localizer) Refresh() error {
-	copiesByLang, err := getCopies(&self.observer, *self.config.LocalesPath, self.config.LocaleExtensions)
+	copiesByLang, err := _getCopies(&self.observer, *self.config.LocalesPath, self.config.LocaleExtensions)
 	if err != nil {
 		return Errors.ErrLocalizerGeneric().Wrap(err)
 	}

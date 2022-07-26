@@ -6,7 +6,8 @@ import (
 
 // TODO: faster serializer (ffjson or sonic)
 
-type SerializerConfig struct{}
+type SerializerConfig struct {
+}
 
 type Serializer struct {
 	config     SerializerConfig
