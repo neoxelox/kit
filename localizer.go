@@ -2,7 +2,7 @@ package kit
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
 	"io/fs"
 	"io/ioutil"
 	"path/filepath"
@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"golang.org/x/text/language"
+	"gopkg.in/yaml.v3"
 )
 
 // TODO: enhance localization with go-i18n, go-localize or spreak
@@ -18,7 +19,7 @@ const _LOCALIZER_LOCALE_CTX_KEY = _BASE_CTX_KEY + "localizer:locale"
 
 var (
 	_LOCALIZER_DEFAULT_LOCALES_PATH      = "./locales"
-	_LOCALIZER_DEFAULT_LOCALE_EXTENSIONS = regexp.MustCompile(`^.*\.(json)$`)
+	_LOCALIZER_DEFAULT_LOCALE_EXTENSIONS = regexp.MustCompile(`^.*\.(yml|yaml)$`)
 )
 
 type LocalizerConfig struct {
@@ -44,9 +45,24 @@ func NewLocalizer(observer Observer, config LocalizerConfig) (*Localizer, error)
 
 	*config.LocalesPath = filepath.Clean(*config.LocalesPath)
 
+	copiesByLang, err := getCopies(&observer, *config.LocalesPath, config.LocaleExtensions)
+	if err != nil {
+		return nil, Errors.ErrLocalizerGeneric().Wrap(err)
+	}
+
+	return &Localizer{
+		config:   config,
+		observer: observer,
+		copies:   copiesByLang,
+	}, nil
+}
+
+func getCopies(
+	observer *Observer, localesPath string,
+	localeExtensions *regexp.Regexp) (map[language.Tag]map[string]string, error) {
 	copiesByLang := make(map[language.Tag]map[string]string)
 
-	err := filepath.WalkDir(*config.LocalesPath, func(path string, info fs.DirEntry, err error) error {
+	err := filepath.WalkDir(localesPath, func(path string, info fs.DirEntry, err error) error {
 		if err != nil {
 			return Errors.ErrLocalizerGeneric().WrapAs(err)
 		}
@@ -55,7 +71,7 @@ func NewLocalizer(observer Observer, config LocalizerConfig) (*Localizer, error)
 			return nil
 		}
 
-		if !config.LocaleExtensions.MatchString(info.Name()) {
+		if !localeExtensions.MatchString(info.Name()) {
 			return nil
 		}
 
@@ -71,7 +87,7 @@ func NewLocalizer(observer Observer, config LocalizerConfig) (*Localizer, error)
 
 		copies := make(map[string]string)
 
-		err = json.Unmarshal(file, &copies)
+		err = yaml.Unmarshal(file, &copies)
 		if err != nil {
 			return Errors.ErrLocalizerGeneric().WrapAs(err)
 		}
@@ -84,11 +100,33 @@ func NewLocalizer(observer Observer, config LocalizerConfig) (*Localizer, error)
 		return nil, Errors.ErrLocalizerGeneric().Wrap(err)
 	}
 
-	return &Localizer{
-		config:   config,
-		observer: observer,
-		copies:   copiesByLang,
-	}, nil
+	locales := len(copiesByLang)
+
+	if locales < 1 {
+		observer.Info("No locales loaded")
+
+		return copiesByLang, nil
+	}
+
+	langs := make([]string, 0, locales)
+	for k := range copiesByLang {
+		langs = append(langs, k.String())
+	}
+
+	observer.Infof("Loaded %d locales: %v", locales, strings.Join(langs, ", "))
+
+	return copiesByLang, nil
+}
+
+func (self *Localizer) Refresh() error {
+	copiesByLang, err := getCopies(&self.observer, *self.config.LocalesPath, self.config.LocaleExtensions)
+	if err != nil {
+		return Errors.ErrLocalizerGeneric().Wrap(err)
+	}
+
+	self.copies = copiesByLang
+
+	return nil
 }
 
 func (self Localizer) SetLocale(ctx context.Context, locale language.Tag) context.Context {
@@ -103,15 +141,15 @@ func (self Localizer) GetLocale(ctx context.Context) language.Tag {
 	return self.config.DefaultLocale
 }
 
-func (self Localizer) Localize(ctx context.Context, copy string) string {
-	copy = strings.ToUpper(copy)
+func (self Localizer) Localize(ctx context.Context, copy string, i ...interface{}) string { // nolint
+	copy = strings.ToUpper(copy) // nolint
 
 	if trans, ok := self.copies[self.GetLocale(ctx)][copy]; ok {
-		return trans
+		return fmt.Sprintf(trans, i...)
 	}
 
 	if trans, ok := self.copies[self.config.DefaultLocale][copy]; ok {
-		return trans
+		return fmt.Sprintf(trans, i...)
 	}
 
 	return copy
