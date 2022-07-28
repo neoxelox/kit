@@ -7,7 +7,7 @@ import (
 )
 
 type ExceptionHandlerConfig struct {
-	Environment string
+	Environment _environment
 }
 
 type ExceptionHandler struct {
@@ -31,13 +31,13 @@ func (self *ExceptionHandler) Handle(err error, ctx echo.Context) {
 	if !ok {
 		switch err {
 		case echo.ErrNotFound:
-			exc = Exceptions.ExcNotFound().Cause(err)
+			exc = ExcNotFound().Cause(err)
 		case echo.ErrStatusRequestEntityTooLarge:
-			exc = Exceptions.ExcInvalidRequest().Cause(err)
+			exc = ExcInvalidRequest().Cause(err)
 		case http.ErrHandlerTimeout:
-			exc = Exceptions.ExcRequestTimeout().Cause(err)
+			exc = ExcRequestTimeout().Cause(err)
 		default: // Fallback.
-			exc = Exceptions.ExcServerGeneric().Cause(err)
+			exc = ExcServerGeneric().Cause(err)
 		}
 	}
 
@@ -52,7 +52,7 @@ func (self *ExceptionHandler) Handle(err error, ctx echo.Context) {
 	if ctx.Request().Method == http.MethodHead {
 		err = ctx.NoContent(exc.status)
 	} else {
-		if self.config.Environment != Environments.Development {
+		if self.config.Environment != EnvDevelopment {
 			exc.Redact()
 		}
 
@@ -60,6 +60,6 @@ func (self *ExceptionHandler) Handle(err error, ctx echo.Context) {
 	}
 
 	if err != nil {
-		self.observer.Error(Errors.ErrExceptionHandlerGeneric().Withf("cannot return exception %s", exc).Wrap(err))
+		self.observer.Error(ErrExceptionHandlerGeneric().Withf("cannot return exception %s", exc).Wrap(err))
 	}
 }

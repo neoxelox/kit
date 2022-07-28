@@ -31,7 +31,7 @@ var (
 )
 
 type LoggerConfig struct {
-	Environment string
+	Environment _environment
 	AppName     string
 	Level       *zerolog.Level
 }
@@ -48,7 +48,7 @@ type Logger struct {
 
 func NewLogger(config LoggerConfig) *Logger {
 	if config.Level == nil {
-		if config.Environment != Environments.Development {
+		if config.Environment != EnvDevelopment {
 			config.Level = &_LOGGER_DEFAULT_PROD_LEVEL
 		} else {
 			config.Level = &_LOGGER_DEFAULT_DEV_LEVEL
@@ -108,10 +108,10 @@ func (self Logger) Flush(ctx context.Context) error {
 	switch {
 	case err == nil:
 		return nil
-	case Errors.ErrDeadlineExceeded().Is(err):
-		return Errors.ErrLoggerTimedOut()
+	case ErrDeadlineExceeded().Is(err):
+		return ErrLoggerTimedOut()
 	default:
-		return Errors.ErrLoggerGeneric().Wrap(err)
+		return ErrLoggerGeneric().Wrap(err)
 	}
 }
 
@@ -121,7 +121,7 @@ func (self Logger) Close(ctx context.Context) error {
 
 		err := self.Flush(ctx)
 		if err != nil {
-			return Errors.ErrLoggerGeneric().WrapAs(err)
+			return ErrLoggerGeneric().WrapAs(err)
 		}
 
 		writer, ok := self.out.(diode.Writer)
@@ -131,7 +131,7 @@ func (self Logger) Close(ctx context.Context) error {
 
 		err = writer.Close()
 		if err != nil {
-			return Errors.ErrLoggerGeneric().WrapAs(err)
+			return ErrLoggerGeneric().WrapAs(err)
 		}
 
 		self.logger.Info().Msg("Closed logger")
@@ -141,10 +141,10 @@ func (self Logger) Close(ctx context.Context) error {
 	switch {
 	case err == nil:
 		return nil
-	case Errors.ErrDeadlineExceeded().Is(err):
-		return Errors.ErrLoggerTimedOut()
+	case ErrDeadlineExceeded().Is(err):
+		return ErrLoggerTimedOut()
 	default:
-		return Errors.ErrLoggerGeneric().Wrap(err)
+		return ErrLoggerGeneric().Wrap(err)
 	}
 }
 
@@ -251,7 +251,7 @@ func (self Logger) Warnf(format string, i ...interface{}) {
 }
 
 func (self Logger) Error(i ...interface{}) {
-	if self.config.Environment == Environments.Production {
+	if self.config.Environment == EnvProduction {
 		self.logger.Error().Msg(fmt.Sprint(i...))
 		return
 	}

@@ -47,7 +47,7 @@ func NewLocalizer(observer Observer, config LocalizerConfig) (*Localizer, error)
 
 	copiesByLang, err := _getCopies(&observer, *config.LocalesPath, config.LocaleExtensions)
 	if err != nil {
-		return nil, Errors.ErrLocalizerGeneric().Wrap(err)
+		return nil, ErrLocalizerGeneric().Wrap(err)
 	}
 
 	return &Localizer{
@@ -64,7 +64,7 @@ func _getCopies(
 
 	err := filepath.WalkDir(localesPath, func(path string, info fs.DirEntry, err error) error {
 		if err != nil {
-			return Errors.ErrLocalizerGeneric().WrapAs(err)
+			return ErrLocalizerGeneric().WrapAs(err)
 		}
 
 		if info.IsDir() {
@@ -82,14 +82,14 @@ func _getCopies(
 
 		file, err := ioutil.ReadFile(path)
 		if err != nil {
-			return Errors.ErrLocalizerGeneric().WrapAs(err)
+			return ErrLocalizerGeneric().WrapAs(err)
 		}
 
 		copies := make(map[string]string)
 
 		err = yaml.Unmarshal(file, &copies)
 		if err != nil {
-			return Errors.ErrLocalizerGeneric().WrapAs(err)
+			return ErrLocalizerGeneric().WrapAs(err)
 		}
 
 		copiesByLang[lang] = copies
@@ -97,7 +97,7 @@ func _getCopies(
 		return nil
 	})
 	if err != nil {
-		return nil, Errors.ErrLocalizerGeneric().Wrap(err)
+		return nil, ErrLocalizerGeneric().Wrap(err)
 	}
 
 	locales := len(copiesByLang)
@@ -120,7 +120,7 @@ func _getCopies(
 func (self *Localizer) Refresh() error {
 	copiesByLang, err := _getCopies(&self.observer, *self.config.LocalesPath, self.config.LocaleExtensions)
 	if err != nil {
-		return Errors.ErrLocalizerGeneric().Wrap(err)
+		return ErrLocalizerGeneric().Wrap(err)
 	}
 
 	self.copies = copiesByLang

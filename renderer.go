@@ -45,7 +45,7 @@ func NewRenderer(observer Observer, config RendererConfig) (*Renderer, error) {
 
 	err := filepath.WalkDir(*config.TemplatesPath, func(path string, info fs.DirEntry, err error) error {
 		if err != nil {
-			return Errors.ErrRendererGeneric().WrapAs(err)
+			return ErrRendererGeneric().WrapAs(err)
 		}
 
 		if info.IsDir() {
@@ -60,18 +60,18 @@ func NewRenderer(observer Observer, config RendererConfig) (*Renderer, error) {
 
 		file, err := ioutil.ReadFile(path)
 		if err != nil {
-			return Errors.ErrRendererGeneric().WrapAs(err)
+			return ErrRendererGeneric().WrapAs(err)
 		}
 
 		_, err = renderer.New(name).Parse(string(file))
 		if err != nil {
-			return Errors.ErrRendererGeneric().WrapAs(err)
+			return ErrRendererGeneric().WrapAs(err)
 		}
 
 		return nil
 	})
 	if err != nil {
-		return nil, Errors.ErrRendererGeneric().Wrap(err)
+		return nil, ErrRendererGeneric().Wrap(err)
 	}
 
 	return &Renderer{
@@ -84,7 +84,7 @@ func NewRenderer(observer Observer, config RendererConfig) (*Renderer, error) {
 func (self *Renderer) Render(w io.Writer, name string, data interface{}, c echo.Context) error { // nolint
 	err := self.renderer.ExecuteTemplate(w, name, data)
 	if err != nil {
-		return Errors.ErrRendererGeneric().Wrap(err)
+		return ErrRendererGeneric().Wrap(err)
 	}
 
 	return nil
@@ -93,7 +93,7 @@ func (self *Renderer) Render(w io.Writer, name string, data interface{}, c echo.
 func (self *Renderer) RenderWriter(w io.Writer, template string, data interface{}) error { // nolint
 	err := self.renderer.ExecuteTemplate(w, template, data)
 	if err != nil {
-		return Errors.ErrRendererGeneric().Wrap(err)
+		return ErrRendererGeneric().Wrap(err)
 	}
 
 	return nil
@@ -104,7 +104,7 @@ func (self *Renderer) RenderBytes(template string, data interface{}) ([]byte, er
 
 	err := self.RenderWriter(&w, template, data)
 	if err != nil {
-		return nil, Errors.ErrRendererGeneric().Wrap(err)
+		return nil, ErrRendererGeneric().Wrap(err)
 	}
 
 	return w.Bytes(), nil
@@ -113,7 +113,7 @@ func (self *Renderer) RenderBytes(template string, data interface{}) ([]byte, er
 func (self *Renderer) RenderString(template string, data interface{}) (string, error) { // nolint
 	bytes, err := self.RenderBytes(template, data) // nolint
 	if err != nil {
-		return "", Errors.ErrRendererGeneric().Wrap(err)
+		return "", ErrRendererGeneric().Wrap(err)
 	}
 
 	return string(bytes), nil

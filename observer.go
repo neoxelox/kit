@@ -28,7 +28,7 @@ type ObserverSentryConfig struct {
 }
 
 type ObserverConfig struct {
-	Environment  string
+	Environment  _environment
 	Release      string
 	AppName      string
 	Level        *zerolog.Level // TODO: use agnostic level
@@ -66,7 +66,7 @@ func NewObserver(ctx context.Context, config ObserverConfig) (*Observer, error) 
 
 					err := sentry.Init(sentry.ClientOptions{
 						Dsn:              config.SentryConfig.Dsn,
-						Environment:      config.Environment,
+						Environment:      string(config.Environment),
 						Release:          config.Release,
 						ServerName:       config.AppName,
 						Debug:            false,
@@ -75,7 +75,7 @@ func NewObserver(ctx context.Context, config ObserverConfig) (*Observer, error) 
 						TracesSampleRate: 0,     // Transaction events. TODO: activate?
 					})
 					if err != nil {
-						return Errors.ErrObserverGeneric().WrapAs(err)
+						return ErrObserverGeneric().WrapAs(err)
 					}
 
 					return nil
@@ -83,10 +83,10 @@ func NewObserver(ctx context.Context, config ObserverConfig) (*Observer, error) 
 		})
 		switch {
 		case err == nil:
-		case Errors.ErrDeadlineExceeded().Is(err):
-			return nil, Errors.ErrObserverTimedOut()
+		case ErrDeadlineExceeded().Is(err):
+			return nil, ErrObserverTimedOut()
 		default:
-			return nil, Errors.ErrObserverGeneric().Wrap(err)
+			return nil, ErrObserverGeneric().Wrap(err)
 		}
 
 		logger.Info("Connected to the Sentry service")
@@ -154,7 +154,7 @@ func (self Observer) Flush(ctx context.Context) error {
 	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		err := self.Logger.Flush(ctx)
 		if err != nil {
-			return Errors.ErrObserverGeneric().WrapAs(err)
+			return ErrObserverGeneric().WrapAs(err)
 		}
 
 		if self.config.SentryConfig != nil {
@@ -165,7 +165,7 @@ func (self Observer) Flush(ctx context.Context) error {
 
 			ok := sentry.Flush(sentryFlushTimeout)
 			if !ok {
-				return Errors.ErrObserverGeneric().With("sentry lost events while flushing")
+				return ErrObserverGeneric().With("sentry lost events while flushing")
 			}
 		}
 
@@ -174,10 +174,10 @@ func (self Observer) Flush(ctx context.Context) error {
 	switch {
 	case err == nil:
 		return nil
-	case Errors.ErrDeadlineExceeded().Is(err):
-		return Errors.ErrObserverTimedOut()
+	case ErrDeadlineExceeded().Is(err):
+		return ErrObserverTimedOut()
 	default:
-		return Errors.ErrObserverGeneric().Wrap(err)
+		return ErrObserverGeneric().Wrap(err)
 	}
 }
 
@@ -187,7 +187,7 @@ func (self Observer) Close(ctx context.Context) error {
 
 		err := self.Flush(ctx)
 		if err != nil {
-			return Errors.ErrObserverGeneric().WrapAs(err)
+			return ErrObserverGeneric().WrapAs(err)
 		}
 
 		if self.config.SentryConfig != nil {
@@ -198,7 +198,7 @@ func (self Observer) Close(ctx context.Context) error {
 
 		err = self.Logger.Close(ctx)
 		if err != nil {
-			return Errors.ErrObserverGeneric().WrapAs(err)
+			return ErrObserverGeneric().WrapAs(err)
 		}
 
 		self.Logger.Info("Closed observer")
@@ -208,9 +208,9 @@ func (self Observer) Close(ctx context.Context) error {
 	switch {
 	case err == nil:
 		return nil
-	case Errors.ErrDeadlineExceeded().Is(err):
-		return Errors.ErrObserverTimedOut()
+	case ErrDeadlineExceeded().Is(err):
+		return ErrObserverTimedOut()
 	default:
-		return Errors.ErrObserverGeneric().Wrap(err)
+		return ErrObserverGeneric().Wrap(err)
 	}
 }

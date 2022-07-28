@@ -28,7 +28,7 @@ func NewSerializer(observer Observer, config SerializerConfig) *Serializer {
 func (self *Serializer) Serialize(c echo.Context, i interface{}, indent string) error {
 	err := self.serializer.Serialize(c, i, indent)
 	if err != nil {
-		return Errors.ErrSerializerGeneric().Wrap(err)
+		return ErrSerializerGeneric().Wrap(err)
 	}
 
 	return nil
@@ -37,7 +37,7 @@ func (self *Serializer) Serialize(c echo.Context, i interface{}, indent string) 
 func (self *Serializer) Deserialize(c echo.Context, i interface{}) error {
 	err := self.serializer.Deserialize(c, i)
 	if err != nil {
-		return Errors.ErrSerializerGeneric().Wrap(err)
+		return ErrSerializerGeneric().Wrap(err)
 	}
 
 	return nil

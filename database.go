@@ -96,7 +96,7 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig) 
 
 	poolConfig, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
-		return nil, Errors.ErrDatabaseGeneric().Wrap(err)
+		return nil, ErrDatabaseGeneric().Wrap(err)
 	}
 
 	poolConfig.MinConns = int32(*config.DatabaseMinConns)
@@ -131,7 +131,7 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig) 
 
 				pool, err = pgxpool.ConnectConfig(ctx, poolConfig)
 				if err != nil {
-					return Errors.ErrDatabaseGeneric().WrapAs(err)
+					return ErrDatabaseGeneric().WrapAs(err)
 				}
 
 				return nil
@@ -139,10 +139,10 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig) 
 	})
 	switch {
 	case err == nil:
-	case Errors.ErrDeadlineExceeded().Is(err):
-		return nil, Errors.ErrDatabaseTimedOut()
+	case ErrDeadlineExceeded().Is(err):
+		return nil, ErrDatabaseTimedOut()
 	default:
-		return nil, Errors.ErrDatabaseGeneric().Wrap(err)
+		return nil, ErrDatabaseGeneric().Wrap(err)
 	}
 
 	observer.Infof("Connected to the %s database", config.DatabaseName)
@@ -160,24 +160,24 @@ func (self *Database) Health(ctx context.Context) error {
 	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		currentConns := self.pool.Stat().TotalConns()
 		if currentConns < int32(*self.config.DatabaseMinConns) {
-			return Errors.ErrDatabaseUnhealthy().Withf("current conns %d below minimum %d",
+			return ErrDatabaseUnhealthy().Withf("current conns %d below minimum %d",
 				currentConns, *self.config.DatabaseMinConns)
 		}
 
 		err := self.pool.Ping(ctx)
 		if err != nil {
-			return Errors.ErrDatabaseUnhealthy().WrapAs(err)
+			return ErrDatabaseUnhealthy().WrapAs(err)
 		}
 
 		rows, err := self.pool.Query(ctx, `SELECT true;`)
 		if err != nil {
-			return Errors.ErrDatabaseUnhealthy().WrapAs(err)
+			return ErrDatabaseUnhealthy().WrapAs(err)
 		}
 
 		var ok bool
 		err = pgxscan.NewScanner(rows).Scan(&ok)
 		if err != nil || !ok {
-			return Errors.ErrDatabaseUnhealthy().WrapAs(err)
+			return ErrDatabaseUnhealthy().WrapAs(err)
 		}
 
 		return nil
@@ -185,10 +185,10 @@ func (self *Database) Health(ctx context.Context) error {
 	switch {
 	case err == nil:
 		return nil
-	case Errors.ErrDeadlineExceeded().Is(err):
-		return Errors.ErrDatabaseTimedOut()
+	case ErrDeadlineExceeded().Is(err):
+		return ErrDatabaseTimedOut()
 	default:
-		return Errors.ErrDatabaseGeneric().Wrap(err)
+		return ErrDatabaseGeneric().Wrap(err)
 	}
 }
 
@@ -202,15 +202,15 @@ func _dbErrToError(err error) *Error {
 		case pgerrcode.IntegrityConstraintViolation, pgerrcode.RestrictViolation, pgerrcode.NotNullViolation,
 			pgerrcode.ForeignKeyViolation, pgerrcode.UniqueViolation, pgerrcode.CheckViolation,
 			pgerrcode.ExclusionViolation:
-			return Errors.ErrDatabaseIntegrityViolation().WrapWithDepth(1, err)
+			return ErrDatabaseIntegrityViolation().WrapWithDepth(1, err)
 		}
 	}
 
 	switch err.Error() {
 	case pgx.ErrNoRows.Error():
-		return Errors.ErrDatabaseNoRows().WrapWithDepth(1, err)
+		return ErrDatabaseNoRows().WrapWithDepth(1, err)
 	default:
-		return Errors.ErrDatabaseGeneric().WrapWithDepth(1, err)
+		return ErrDatabaseGeneric().WrapWithDepth(1, err)
 	}
 }
 
@@ -271,7 +271,7 @@ func (self *Database) Transaction(ctx context.Context, fn func(ctx context.Conte
 	if ctx.Value(_DATABASE_TRANSACTION_CTX_KEY) != nil {
 		err := fn(ctx)
 		if err != nil {
-			return Errors.ErrDatabaseTransactionFailed().WrapAs(err)
+			return ErrDatabaseTransactionFailed().WrapAs(err)
 		}
 
 		return nil
@@ -282,12 +282,12 @@ func (self *Database) Transaction(ctx context.Context, fn func(ctx context.Conte
 		AccessMode: pgx.ReadWrite,
 	})
 	if err != nil {
-		return Errors.ErrDatabaseTransactionFailed().Wrap(err)
+		return ErrDatabaseTransactionFailed().Wrap(err)
 	}
 
 	err = ctx.Err()
 	if err != nil {
-		return Errors.ErrDatabaseTransactionFailed().Wrap(err)
+		return ErrDatabaseTransactionFailed().Wrap(err)
 	}
 
 	defer func() {
@@ -301,25 +301,25 @@ func (self *Database) Transaction(ctx context.Context, fn func(ctx context.Conte
 	err = fn(context.WithValue(ctx, _DATABASE_TRANSACTION_CTX_KEY, transaction))
 	if err != nil {
 		errR := transaction.Rollback(ctx)
-		return Errors.ErrDatabaseTransactionFailed().Wrap(Utils.CombineErrors(err, errR))
+		return ErrDatabaseTransactionFailed().Wrap(Utils.CombineErrors(err, errR))
 	}
 
 	err = ctx.Err()
 	if err != nil {
 		errR := transaction.Rollback(ctx)
-		return Errors.ErrDatabaseTransactionFailed().Wrap(Utils.CombineErrors(err, errR))
+		return ErrDatabaseTransactionFailed().Wrap(Utils.CombineErrors(err, errR))
 	}
 
 	err = transaction.Commit(ctx)
 	if err != nil {
 		errR := transaction.Rollback(ctx)
-		return Errors.ErrDatabaseTransactionFailed().Wrap(Utils.CombineErrors(err, errR))
+		return ErrDatabaseTransactionFailed().Wrap(Utils.CombineErrors(err, errR))
 	}
 
 	err = ctx.Err()
 	if err != nil {
 		errR := transaction.Rollback(ctx)
-		return Errors.ErrDatabaseTransactionFailed().Wrap(Utils.CombineErrors(err, errR))
+		return ErrDatabaseTransactionFailed().Wrap(Utils.CombineErrors(err, errR))
 	}
 
 	return nil
@@ -338,10 +338,10 @@ func (self *Database) Close(ctx context.Context) error {
 	switch {
 	case err == nil:
 		return nil
-	case Errors.ErrDeadlineExceeded().Is(err):
-		return Errors.ErrDatabaseTimedOut()
+	case ErrDeadlineExceeded().Is(err):
+		return ErrDatabaseTimedOut()
 	default:
-		return Errors.ErrDatabaseGeneric().Wrap(err)
+		return ErrDatabaseGeneric().Wrap(err)
 	}
 }
 

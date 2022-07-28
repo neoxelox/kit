@@ -20,7 +20,7 @@ var (
 )
 
 type ServerConfig struct {
-	Environment              string
+	Environment              _environment
 	AppPort                  int
 	RequestHeaderMaxSize     *int
 	RequestKeepAliveTimeout  *time.Duration
@@ -64,7 +64,7 @@ func NewServer(observer Observer, serializer Serializer, binder Binder,
 	server.HideBanner = true
 	server.HidePort = true
 	server.DisableHTTP2 = true
-	server.Debug = config.Environment == Environments.Development
+	server.Debug = config.Environment == EnvDevelopment
 	server.Server.MaxHeaderBytes = *config.RequestHeaderMaxSize
 	server.Server.IdleTimeout = *config.RequestKeepAliveTimeout
 	server.Server.ReadHeaderTimeout = *config.RequestReadHeaderTimeout
@@ -92,7 +92,7 @@ func (self *Server) Run() error {
 
 	err := self.server.Start(fmt.Sprintf(":%d", self.config.AppPort))
 	if err != nil && err != http.ErrServerClosed {
-		return Errors.ErrServerGeneric().Wrap(err)
+		return ErrServerGeneric().Wrap(err)
 	}
 
 	return nil
@@ -114,7 +114,7 @@ func (self *Server) Close(ctx context.Context) error {
 
 		err := self.server.Shutdown(ctx)
 		if err != nil {
-			return Errors.ErrServerGeneric().WrapAs(err)
+			return ErrServerGeneric().WrapAs(err)
 		}
 
 		self.observer.Info("Closed server")
@@ -124,9 +124,9 @@ func (self *Server) Close(ctx context.Context) error {
 	switch {
 	case err == nil:
 		return nil
-	case Errors.ErrDeadlineExceeded().Is(err):
-		return Errors.ErrServerTimedOut()
+	case ErrDeadlineExceeded().Is(err):
+		return ErrServerTimedOut()
 	default:
-		return Errors.ErrServerGeneric().Wrap(err)
+		return ErrServerGeneric().Wrap(err)
 	}
 }

@@ -26,90 +26,67 @@ type _ctxKey string
 
 const _BASE_CTX_KEY _ctxKey = "kit:"
 
-type _environments struct {
-	Development string
-	Production  string
-}
+type _environment string
 
-var Environments = _environments{
-	Development: "dev",
-	Production:  "prod",
-}
+// Builtin environments.
+var (
+	EnvDevelopment _environment = "dev"
+	EnvProduction  _environment = "prod"
+)
 
-type _errors struct {
-	ErrDeadlineExceeded           func() *Error
-	ErrLoggerGeneric              func() *Error
-	ErrLoggerTimedOut             func() *Error
-	ErrBinderGeneric              func() *Error
-	ErrExceptionHandlerGeneric    func() *Error
-	ErrMigratorGeneric            func() *Error
-	ErrMigratorTimedOut           func() *Error
-	ErrObserverGeneric            func() *Error
-	ErrObserverTimedOut           func() *Error
-	ErrSerializerGeneric          func() *Error
-	ErrRendererGeneric            func() *Error
-	ErrLocalizerGeneric           func() *Error
-	ErrServerGeneric              func() *Error
-	ErrServerTimedOut             func() *Error
-	ErrDatabaseGeneric            func() *Error
-	ErrDatabaseTimedOut           func() *Error
-	ErrDatabaseUnhealthy          func() *Error
-	ErrDatabaseTransactionFailed  func() *Error
-	ErrDatabaseNoRows             func() *Error
-	ErrDatabaseIntegrityViolation func() *Error
-}
+type _level string
 
-// Errors contains the builtin errors.
-var Errors = _errors{
-	ErrDeadlineExceeded:           NewError("deadline exceeded"),
-	ErrLoggerGeneric:              NewError("logger failed"),
-	ErrLoggerTimedOut:             NewError("logger timed out"),
-	ErrBinderGeneric:              NewError("binder failed"),
-	ErrExceptionHandlerGeneric:    NewError("error handler failed"),
-	ErrMigratorGeneric:            NewError("migrator failed"),
-	ErrMigratorTimedOut:           NewError("migrator timed out"),
-	ErrObserverGeneric:            NewError("observer failed"),
-	ErrObserverTimedOut:           NewError("observer timed out"),
-	ErrSerializerGeneric:          NewError("serializer failed"),
-	ErrRendererGeneric:            NewError("renderer failed"),
-	ErrLocalizerGeneric:           NewError("localizer failed"),
-	ErrServerGeneric:              NewError("server failed"),
-	ErrServerTimedOut:             NewError("server timed out"),
-	ErrDatabaseGeneric:            NewError("database failed"),
-	ErrDatabaseTimedOut:           NewError("database timed out"),
-	ErrDatabaseUnhealthy:          NewError("database unhealthy"),
-	ErrDatabaseTransactionFailed:  NewError("database transaction failed"),
-	ErrDatabaseNoRows:             NewError("database no rows in result set"),
-	ErrDatabaseIntegrityViolation: NewError("database integrity constraint violation"),
-}
+// Builtin levels.
+var (
+	LvlTrace _level = "trace"
+	LvlDebug _level = "debug"
+	LvlInfo  _level = "info"
+	LvlWarn  _level = "warn"
+	LvlError _level = "error"
+	LvlNone  _level = "none"
+)
 
-type _exceptions struct {
+// Builtin errors.
+var (
+	ErrDeadlineExceeded           = NewError("deadline exceeded")
+	ErrLoggerGeneric              = NewError("logger failed")
+	ErrLoggerTimedOut             = NewError("logger timed out")
+	ErrBinderGeneric              = NewError("binder failed")
+	ErrExceptionHandlerGeneric    = NewError("error handler failed")
+	ErrMigratorGeneric            = NewError("migrator failed")
+	ErrMigratorTimedOut           = NewError("migrator timed out")
+	ErrObserverGeneric            = NewError("observer failed")
+	ErrObserverTimedOut           = NewError("observer timed out")
+	ErrSerializerGeneric          = NewError("serializer failed")
+	ErrRendererGeneric            = NewError("renderer failed")
+	ErrLocalizerGeneric           = NewError("localizer failed")
+	ErrServerGeneric              = NewError("server failed")
+	ErrServerTimedOut             = NewError("server timed out")
+	ErrDatabaseGeneric            = NewError("database failed")
+	ErrDatabaseTimedOut           = NewError("database timed out")
+	ErrDatabaseUnhealthy          = NewError("database unhealthy")
+	ErrDatabaseTransactionFailed  = NewError("database transaction failed")
+	ErrDatabaseNoRows             = NewError("database no rows in result set")
+	ErrDatabaseIntegrityViolation = NewError("database integrity constraint violation")
+)
+
+// Builtin exceptions.
+var (
 	// ExcServerGeneric generic server exception.
-	ExcServerGeneric func() *Exception
+	ExcServerGeneric = NewException(http.StatusInternalServerError, "ERR_SERVER_GENERIC")
 	// ExcServerUnavailable server Unavailable exception.
-	ExcServerUnavailable func() *Exception
+	ExcServerUnavailable = NewException(http.StatusServiceUnavailable, "ERR_SERVER_UNAVAILABLE")
 	// ExcRequestTimeout request timeout exception.
-	ExcRequestTimeout func() *Exception
+	ExcRequestTimeout = NewException(http.StatusRequestTimeout, "ERR_REQUEST_TIMEOUT")
 	// ExcClientGeneric generic client exception.
-	ExcClientGeneric func() *Exception
+	ExcClientGeneric = NewException(http.StatusBadRequest, "ERR_CLIENT_GENERIC")
 	// ExcInvalidRequest invalid request exception.
-	ExcInvalidRequest func() *Exception
+	ExcInvalidRequest = NewException(http.StatusBadRequest, "ERR_INVALID_REQUEST")
 	// ExcNotFound not found exception.
-	ExcNotFound func() *Exception
+	ExcNotFound = NewException(http.StatusNotFound, "ERR_NOT_FOUND")
 	// ExcUnauthorized unauthorized exception.
-	ExcUnauthorized func() *Exception
-}
-
-// Exceptions contains the builtin exceptions.
-var Exceptions = _exceptions{
-	ExcServerGeneric:     NewException(http.StatusInternalServerError, "ERR_SERVER_GENERIC"),
-	ExcServerUnavailable: NewException(http.StatusServiceUnavailable, "ERR_SERVER_UNAVAILABLE"),
-	ExcRequestTimeout:    NewException(http.StatusRequestTimeout, "ERR_REQUEST_TIMEOUT"),
-	ExcClientGeneric:     NewException(http.StatusBadRequest, "ERR_CLIENT_GENERIC"),
-	ExcInvalidRequest:    NewException(http.StatusBadRequest, "ERR_INVALID_REQUEST"),
-	ExcNotFound:          NewException(http.StatusNotFound, "ERR_NOT_FOUND"),
-	ExcUnauthorized:      NewException(http.StatusUnauthorized, "ERR_UNAUTHORIZED"),
-}
+	ExcUnauthorized = NewException(http.StatusUnauthorized, "ERR_UNAUTHORIZED")
+)
 
 const (
 	_UTILS_BYTE_BASE_SIZE        = 1024
@@ -252,7 +229,7 @@ func (self _utils) Deadline(ctx context.Context, fn func(exceeded <-chan struct{
 	if ctxDeadline, ok := ctx.Deadline(); ok {
 		err := deadline.New(time.Until(ctxDeadline)).Run(fn)
 		if err == deadline.ErrTimedOut {
-			err = Errors.ErrDeadlineExceeded()
+			err = ErrDeadlineExceeded()
 		}
 
 		return err

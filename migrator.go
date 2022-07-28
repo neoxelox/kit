@@ -88,7 +88,7 @@ func NewMigrator(ctx context.Context, observer Observer, config MigratorConfig) 
 
 				migrator, err = migrate.New(*config.MigrationsPath, dsn)
 				if err != nil {
-					return Errors.ErrMigratorGeneric().WrapAs(err)
+					return ErrMigratorGeneric().WrapAs(err)
 				}
 
 				return nil
@@ -96,10 +96,10 @@ func NewMigrator(ctx context.Context, observer Observer, config MigratorConfig) 
 	})
 	switch {
 	case err == nil:
-	case Errors.ErrDeadlineExceeded().Is(err):
-		return nil, Errors.ErrMigratorTimedOut()
+	case ErrDeadlineExceeded().Is(err):
+		return nil, ErrMigratorTimedOut()
 	default:
-		return nil, Errors.ErrMigratorGeneric().Wrap(err)
+		return nil, ErrMigratorGeneric().Wrap(err)
 	}
 
 	observer.Infof("Connected to the %s database", config.DatabaseName)
@@ -129,18 +129,18 @@ func (self *Migrator) Assert(ctx context.Context, schemaVersion int) error {
 		err := func() error {
 			currentSchemaVersion, bad, err := self.migrator.Version() // nolint
 			if err != nil && err != migrate.ErrNilVersion {
-				return Errors.ErrMigratorGeneric().WrapAs(err)
+				return ErrMigratorGeneric().WrapAs(err)
 			}
 
 			if bad {
-				return Errors.ErrMigratorGeneric().Withf("current schema version %d is dirty", currentSchemaVersion)
+				return ErrMigratorGeneric().Withf("current schema version %d is dirty", currentSchemaVersion)
 			}
 
 			if currentSchemaVersion > uint(schemaVersion) {
-				return Errors.ErrMigratorGeneric().Withf("desired schema version %d behind from current one %d",
+				return ErrMigratorGeneric().Withf("desired schema version %d behind from current one %d",
 					schemaVersion, currentSchemaVersion)
 			} else if currentSchemaVersion < uint(schemaVersion) {
-				return Errors.ErrMigratorGeneric().Withf("desired schema version %d ahead of current one %d",
+				return ErrMigratorGeneric().Withf("desired schema version %d ahead of current one %d",
 					schemaVersion, currentSchemaVersion)
 			}
 
@@ -163,10 +163,10 @@ func (self *Migrator) Assert(ctx context.Context, schemaVersion int) error {
 	switch {
 	case err == nil:
 		return nil
-	case Errors.ErrDeadlineExceeded().Is(err):
-		return Errors.ErrMigratorTimedOut()
+	case ErrDeadlineExceeded().Is(err):
+		return ErrMigratorTimedOut()
 	default:
-		return Errors.ErrMigratorGeneric().Wrap(err)
+		return ErrMigratorGeneric().Wrap(err)
 	}
 }
 
@@ -182,11 +182,11 @@ func (self *Migrator) Apply(ctx context.Context, schemaVersion int) error {
 		err := func() error {
 			currentSchemaVersion, bad, err := self.migrator.Version() // nolint
 			if err != nil && err != migrate.ErrNilVersion {
-				return Errors.ErrMigratorGeneric().WrapAs(err)
+				return ErrMigratorGeneric().WrapAs(err)
 			}
 
 			if bad {
-				return Errors.ErrMigratorGeneric().Withf("current schema version %d is dirty", currentSchemaVersion)
+				return ErrMigratorGeneric().Withf("current schema version %d is dirty", currentSchemaVersion)
 			}
 
 			if currentSchemaVersion == uint(schemaVersion) {
@@ -195,7 +195,7 @@ func (self *Migrator) Apply(ctx context.Context, schemaVersion int) error {
 			}
 
 			if currentSchemaVersion > uint(schemaVersion) {
-				return Errors.ErrMigratorGeneric().Withf("desired schema version %d behind from current one %d",
+				return ErrMigratorGeneric().Withf("desired schema version %d behind from current one %d",
 					schemaVersion, currentSchemaVersion)
 			}
 
@@ -203,7 +203,7 @@ func (self *Migrator) Apply(ctx context.Context, schemaVersion int) error {
 
 			err = self.migrator.Migrate(uint(schemaVersion))
 			if err != nil {
-				return Errors.ErrMigratorGeneric().WrapAs(err)
+				return ErrMigratorGeneric().WrapAs(err)
 			}
 
 			self.observer.Info("Applied all migrations successfully")
@@ -225,10 +225,10 @@ func (self *Migrator) Apply(ctx context.Context, schemaVersion int) error {
 	switch {
 	case err == nil:
 		return nil
-	case Errors.ErrDeadlineExceeded().Is(err):
-		return Errors.ErrMigratorTimedOut()
+	case ErrDeadlineExceeded().Is(err):
+		return ErrMigratorTimedOut()
 	default:
-		return Errors.ErrMigratorGeneric().Wrap(err)
+		return ErrMigratorGeneric().Wrap(err)
 	}
 }
 
@@ -244,7 +244,7 @@ func (self *Migrator) Rollback(ctx context.Context, schemaVersion int) error {
 		err := func() error {
 			currentSchemaVersion, bad, err := self.migrator.Version() // nolint
 			if err != nil {
-				return Errors.ErrMigratorGeneric().WrapAs(err)
+				return ErrMigratorGeneric().WrapAs(err)
 			}
 
 			if bad {
@@ -252,7 +252,7 @@ func (self *Migrator) Rollback(ctx context.Context, schemaVersion int) error {
 
 				err = self.migrator.Force(int(currentSchemaVersion))
 				if err != nil {
-					return Errors.ErrMigratorGeneric().WrapAs(err)
+					return ErrMigratorGeneric().WrapAs(err)
 				}
 			}
 
@@ -262,7 +262,7 @@ func (self *Migrator) Rollback(ctx context.Context, schemaVersion int) error {
 			}
 
 			if currentSchemaVersion < uint(schemaVersion) {
-				return Errors.ErrMigratorGeneric().Withf("desired schema version %d ahead of current one %d",
+				return ErrMigratorGeneric().Withf("desired schema version %d ahead of current one %d",
 					schemaVersion, currentSchemaVersion)
 			}
 
@@ -270,7 +270,7 @@ func (self *Migrator) Rollback(ctx context.Context, schemaVersion int) error {
 
 			err = self.migrator.Migrate(uint(schemaVersion))
 			if err != nil {
-				return Errors.ErrMigratorGeneric().WrapAs(err)
+				return ErrMigratorGeneric().WrapAs(err)
 			}
 
 			self.observer.Info("Rollbacked all migrations successfully")
@@ -292,10 +292,10 @@ func (self *Migrator) Rollback(ctx context.Context, schemaVersion int) error {
 	switch {
 	case err == nil:
 		return nil
-	case Errors.ErrDeadlineExceeded().Is(err):
-		return Errors.ErrMigratorTimedOut()
+	case ErrDeadlineExceeded().Is(err):
+		return ErrMigratorTimedOut()
 	default:
-		return Errors.ErrMigratorGeneric().Wrap(err)
+		return ErrMigratorGeneric().Wrap(err)
 	}
 }
 
@@ -317,7 +317,7 @@ func (self *Migrator) Close(ctx context.Context) error {
 
 		err = Utils.CombineErrors(err, errD)
 		if err != nil {
-			return Errors.ErrMigratorGeneric().WrapAs(err)
+			return ErrMigratorGeneric().WrapAs(err)
 		}
 
 		self.observer.Info("Closed migrator")
@@ -327,10 +327,10 @@ func (self *Migrator) Close(ctx context.Context) error {
 	switch {
 	case err == nil:
 		return nil
-	case Errors.ErrDeadlineExceeded().Is(err):
-		return Errors.ErrMigratorTimedOut()
+	case ErrDeadlineExceeded().Is(err):
+		return ErrMigratorTimedOut()
 	default:
-		return Errors.ErrMigratorGeneric().Wrap(err)
+		return ErrMigratorGeneric().Wrap(err)
 	}
 }
 
