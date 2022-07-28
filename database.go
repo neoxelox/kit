@@ -71,19 +71,19 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig) 
 	observer.Anchor()
 
 	if config.DatabaseMinConns == nil {
-		config.DatabaseMinConns = &_DATABASE_DEFAULT_MIN_CONNS
+		config.DatabaseMinConns = ptr(_DATABASE_DEFAULT_MIN_CONNS)
 	}
 
 	if config.DatabaseMaxConns == nil {
-		config.DatabaseMaxConns = &_DATABASE_DEFAULT_MAX_CONNS
+		config.DatabaseMaxConns = ptr(_DATABASE_DEFAULT_MAX_CONNS)
 	}
 
 	if config.DatabaseMaxConnIdleTime == nil {
-		config.DatabaseMaxConnIdleTime = &_DATABASE_DEFAULT_MAX_CONN_IDLE_TIME
+		config.DatabaseMaxConnIdleTime = ptr(_DATABASE_DEFAULT_MAX_CONN_IDLE_TIME)
 	}
 
 	if config.DatabaseMaxConnLifeTime == nil {
-		config.DatabaseMaxConnLifeTime = &_DATABASE_DEFAULT_MAX_CONN_LIFE_TIME
+		config.DatabaseMaxConnLifeTime = ptr(_DATABASE_DEFAULT_MAX_CONN_LIFE_TIME)
 	}
 
 	if config.RetryConfig == nil {

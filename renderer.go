@@ -32,11 +32,11 @@ func NewRenderer(observer Observer, config RendererConfig) (*Renderer, error) {
 	observer.Anchor()
 
 	if config.TemplatesPath == nil {
-		config.TemplatesPath = &_RENDERER_DEFAULT_TEMPLATES_PATH
+		config.TemplatesPath = ptr(_RENDERER_DEFAULT_TEMPLATES_PATH)
 	}
 
 	if config.TemplateExtensions == nil {
-		config.TemplateExtensions = _RENDERER_DEFAULT_TEMPLATE_EXTENSIONS
+		config.TemplateExtensions = _RENDERER_DEFAULT_TEMPLATE_EXTENSIONS.Copy()
 	}
 
 	*config.TemplatesPath = filepath.Clean(*config.TemplatesPath)

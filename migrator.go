@@ -51,7 +51,7 @@ func NewMigrator(ctx context.Context, observer Observer, config MigratorConfig) 
 	observer.Anchor()
 
 	if config.MigrationsPath == nil {
-		config.MigrationsPath = &_MIGRATOR_DEFAULT_MIGRATIONS_PATH
+		config.MigrationsPath = ptr(_MIGRATOR_DEFAULT_MIGRATIONS_PATH)
 	}
 
 	*config.MigrationsPath = fmt.Sprintf("file://%s", filepath.Clean(*config.MigrationsPath))

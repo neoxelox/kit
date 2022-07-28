@@ -19,6 +19,10 @@ import (
 	"github.com/scylladb/go-set/strset"
 )
 
+func ptr[T any](v T) *T {
+	return &v
+}
+
 type _ctxKey string
 
 const _BASE_CTX_KEY _ctxKey = "kit:"

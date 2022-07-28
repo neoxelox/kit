@@ -38,10 +38,10 @@ func NewLocalizer(observer Observer, config LocalizerConfig) (*Localizer, error)
 	observer.Anchor()
 
 	if config.LocalesPath == nil {
-		config.LocalesPath = &_LOCALIZER_DEFAULT_LOCALES_PATH
+		config.LocalesPath = ptr(_LOCALIZER_DEFAULT_LOCALES_PATH)
 	}
 
-	config.LocaleExtensions = _LOCALIZER_DEFAULT_LOCALE_EXTENSIONS
+	config.LocaleExtensions = _LOCALIZER_DEFAULT_LOCALE_EXTENSIONS.Copy()
 
 	*config.LocalesPath = filepath.Clean(*config.LocalesPath)
 

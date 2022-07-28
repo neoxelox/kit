@@ -12,7 +12,6 @@ require (
 	github.com/jackc/pgerrcode v0.0.0-20201024163028-a0d42d470451
 	github.com/jackc/pgx/v4 v4.16.1
 	github.com/labstack/echo/v4 v4.5.0
-	github.com/labstack/gommon v0.3.1
 	github.com/leporo/sqlf v1.3.0
 	github.com/randallmlough/pgxscan v0.3.0
 	github.com/rs/zerolog v1.27.0
@@ -36,6 +35,7 @@ require (
 	github.com/jackc/puddle v1.2.1 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
+	github.com/labstack/gommon v0.3.1 // indirect
 	github.com/lib/pq v1.10.2 // indirect
 	github.com/mattn/go-colorable v0.1.12 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect

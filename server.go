@@ -40,23 +40,23 @@ func NewServer(observer Observer, serializer Serializer, binder Binder,
 	observer.Anchor()
 
 	if config.RequestHeaderMaxSize == nil {
-		config.RequestHeaderMaxSize = &_SERVER_DEFAULT_REQUEST_HEADER_MAX_SIZE
+		config.RequestHeaderMaxSize = ptr(_SERVER_DEFAULT_REQUEST_HEADER_MAX_SIZE)
 	}
 
 	if config.RequestKeepAliveTimeout == nil {
-		config.RequestKeepAliveTimeout = &_SERVER_DEFAULT_REQUEST_KEEP_ALIVE_TIMEOUT
+		config.RequestKeepAliveTimeout = ptr(_SERVER_DEFAULT_REQUEST_KEEP_ALIVE_TIMEOUT)
 	}
 
 	if config.RequestReadTimeout == nil {
-		config.RequestReadTimeout = &_SERVER_DEFAULT_REQUEST_READ_TIMEOUT
+		config.RequestReadTimeout = ptr(_SERVER_DEFAULT_REQUEST_READ_TIMEOUT)
 	}
 
 	if config.RequestReadHeaderTimeout == nil {
-		config.RequestReadHeaderTimeout = &_SERVER_DEFAULT_REQUEST_READ_HEADER_TIMEOUT
+		config.RequestReadHeaderTimeout = ptr(_SERVER_DEFAULT_REQUEST_READ_HEADER_TIMEOUT)
 	}
 
 	if config.ResponseWriteTimeout == nil {
-		config.ResponseWriteTimeout = &_SERVER_DEFAULT_RESPONSE_WRITE_TIMEOUT
+		config.ResponseWriteTimeout = ptr(_SERVER_DEFAULT_RESPONSE_WRITE_TIMEOUT)
 	}
 
 	server := echo.New()

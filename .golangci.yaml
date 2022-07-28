@@ -365,6 +365,9 @@ issues:
     - linters: [stylecheck]
       text: "receiver name should be a reflection of its identity"
 
+    - linters: [staticcheck]
+      text: "SA1019"
+
     - linters: [gofumpt]
       text: "file is not `gofumpt`-ed with `-extra`"
 
