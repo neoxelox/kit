@@ -7,7 +7,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/getsentry/sentry-go"
-	"github.com/rs/zerolog"
 )
 
 var (
@@ -31,7 +30,7 @@ type ObserverConfig struct {
 	Environment  _environment
 	Release      string
 	AppName      string
-	Level        *zerolog.Level // TODO: use agnostic level
+	Level        _level
 	SentryConfig *ObserverSentryConfig
 	RetryConfig  *ObserverRetryConfig
 }
@@ -51,9 +50,8 @@ func NewObserver(ctx context.Context, config ObserverConfig) (*Observer, error) 
 	}
 
 	logger := NewLogger(LoggerConfig{
-		Environment: config.Environment,
-		AppName:     config.AppName,
-		Level:       config.Level,
+		AppName: config.AppName,
+		Level:   config.Level,
 	})
 
 	if config.SentryConfig != nil {
@@ -99,10 +97,14 @@ func NewObserver(ctx context.Context, config ObserverConfig) (*Observer, error) 
 }
 
 func (self *Observer) Anchor() {
-	self.Logger.SetFile(2) // nolint
+	self.Logger.SetFile(2)
 }
 
 func (self Observer) Error(i ...interface{}) {
+	if !(LvlError >= self.config.Level) {
+		return
+	}
+
 	self.Logger.Error(i...)
 
 	if self.config.SentryConfig != nil {

@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/leporo/sqlf"
 	"github.com/randallmlough/pgxscan"
+	"github.com/rs/zerolog"
 )
 
 const (
@@ -29,6 +30,15 @@ var (
 	_DATABASE_DEFAULT_RETRY_LIMIT_DELAY   = 0 * time.Second
 	_DATABASE_ERR_PGCODE                  = regexp.MustCompile(`\(SQLSTATE (.*)\)`)
 )
+
+var _KlevelToPlevel = map[_level]pgx.LogLevel{
+	LvlTrace: pgx.LogLevelTrace,
+	LvlDebug: pgx.LogLevelDebug,
+	LvlInfo:  pgx.LogLevelInfo,
+	LvlWarn:  pgx.LogLevelWarn,
+	LvlError: pgx.LogLevelError,
+	LvlNone:  pgx.LogLevelNone,
+}
 
 type DatabaseRetryConfig struct {
 	Attempts     int
@@ -107,10 +117,10 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig) 
 	poolConfig.ConnConfig.RuntimeParams["application_name"] = config.AppName
 
 	pgxLogger := _newPgxLogger(observer.Logger)
-	pgxLogLevel := pgxLogger.logger.PLevel()
+	pgxLogLevel := _KlevelToPlevel[pgxLogger.logger.Level()]
 
-	// PGX Info level is too much!
-	if pgxLogLevel == pgx.LogLevelInfo {
+	// PGX Info level is too much! (PGX levels are reversed)
+	if pgxLogLevel >= pgx.LogLevelInfo {
 		pgxLogLevel = pgx.LogLevelError
 	}
 
@@ -345,6 +355,15 @@ func (self *Database) Close(ctx context.Context) error {
 	}
 }
 
+var _PlevelToZlevel = map[pgx.LogLevel]zerolog.Level{
+	pgx.LogLevelTrace: zerolog.TraceLevel,
+	pgx.LogLevelDebug: zerolog.DebugLevel,
+	pgx.LogLevelInfo:  zerolog.InfoLevel,
+	pgx.LogLevelWarn:  zerolog.WarnLevel,
+	pgx.LogLevelError: zerolog.ErrorLevel,
+	pgx.LogLevelNone:  zerolog.Disabled,
+}
+
 type _pgxLogger struct {
 	logger Logger
 }
@@ -356,5 +375,5 @@ func _newPgxLogger(logger Logger) *_pgxLogger {
 }
 
 func (self _pgxLogger) Log(ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{}) { // nolint
-	self.logger.Logger().WithLevel(Utils.PlevelToZlevel[level]).Fields(data).Msg(msg)
+	self.logger.Logger().WithLevel(_PlevelToZlevel[level]).Fields(data).Msg(msg)
 }

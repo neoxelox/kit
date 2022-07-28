@@ -16,9 +16,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/eapache/go-resiliency/deadline"
 	"github.com/eapache/go-resiliency/retrier"
-	"github.com/jackc/pgx/v4"
-	gommon "github.com/labstack/gommon/log"
-	"github.com/rs/zerolog"
 	"github.com/scylladb/go-set/strset"
 )
 
@@ -34,16 +31,16 @@ var (
 	EnvProduction  _environment = "prod"
 )
 
-type _level string
+type _level int
 
 // Builtin levels.
 var (
-	LvlTrace _level = "trace"
-	LvlDebug _level = "debug"
-	LvlInfo  _level = "info"
-	LvlWarn  _level = "warn"
-	LvlError _level = "error"
-	LvlNone  _level = "none"
+	LvlTrace _level = -5
+	LvlDebug _level = -4
+	LvlInfo  _level = -3
+	LvlWarn  _level = -2
+	LvlError _level = -1
+	LvlNone  _level
 )
 
 // Builtin errors.
@@ -94,46 +91,10 @@ const (
 	_UTILS_ASCII_LETTER_SET_SIZE = 62
 )
 
-type _utils struct {
-	ZlevelToGlevel map[zerolog.Level]gommon.Lvl
-	GlevelToZlevel map[gommon.Lvl]zerolog.Level
-	ZlevelToPlevel map[zerolog.Level]pgx.LogLevel
-	PlevelToZlevel map[pgx.LogLevel]zerolog.Level
-}
+type _utils struct{}
 
 // Utils contains the builtin utils.
-var Utils = _utils{
-	ZlevelToGlevel: map[zerolog.Level]gommon.Lvl{
-		zerolog.DebugLevel: gommon.DEBUG,
-		zerolog.InfoLevel:  gommon.INFO,
-		zerolog.WarnLevel:  gommon.WARN,
-		zerolog.ErrorLevel: gommon.ERROR,
-		zerolog.Disabled:   gommon.OFF,
-	},
-	GlevelToZlevel: map[gommon.Lvl]zerolog.Level{
-		gommon.DEBUG: zerolog.DebugLevel,
-		gommon.INFO:  zerolog.InfoLevel,
-		gommon.WARN:  zerolog.WarnLevel,
-		gommon.ERROR: zerolog.ErrorLevel,
-		gommon.OFF:   zerolog.Disabled,
-	},
-	ZlevelToPlevel: map[zerolog.Level]pgx.LogLevel{
-		zerolog.TraceLevel: pgx.LogLevelTrace,
-		zerolog.DebugLevel: pgx.LogLevelDebug,
-		zerolog.InfoLevel:  pgx.LogLevelInfo,
-		zerolog.WarnLevel:  pgx.LogLevelWarn,
-		zerolog.ErrorLevel: pgx.LogLevelError,
-		zerolog.Disabled:   pgx.LogLevelNone,
-	},
-	PlevelToZlevel: map[pgx.LogLevel]zerolog.Level{
-		pgx.LogLevelTrace: zerolog.TraceLevel,
-		pgx.LogLevelDebug: zerolog.DebugLevel,
-		pgx.LogLevelInfo:  zerolog.InfoLevel,
-		pgx.LogLevelWarn:  zerolog.WarnLevel,
-		pgx.LogLevelError: zerolog.ErrorLevel,
-		pgx.LogLevelNone:  zerolog.Disabled,
-	},
-}
+var Utils = _utils{}
 
 func (self _utils) ByteSize(size int) string {
 	if size < _UTILS_BYTE_BASE_SIZE {

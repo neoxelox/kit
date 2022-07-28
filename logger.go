@@ -8,32 +8,34 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/jackc/pgx/v4"
-	gommon "github.com/labstack/gommon/log"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/diode"
 )
 
 const (
-	_LOGGER_LEVEL_FIELD_NAME     = "level"
-	_LOGGER_MESSAGE_FIELD_NAME   = "message"
-	_LOGGER_APP_FIELD_NAME       = "app"
-	_LOGGER_FILE_FIELD_NAME      = "file"
-	_LOGGER_TIMESTAMP_FIELD_NAME = "timestamp"
-	_LOGGER_WRITER_SIZE          = 1000
-	_LOGGER_POLL_INTERVAL        = 10 * time.Millisecond
-	_LOGGER_FLUSH_DELAY          = _LOGGER_POLL_INTERVAL * 10
+	_LOGGER_LEVEL_FIELD_NAME       = "level"
+	_LOGGER_MESSAGE_FIELD_NAME     = "message"
+	_LOGGER_APP_FIELD_NAME         = "app"
+	_LOGGER_FILE_FIELD_NAME        = "file"
+	_LOGGER_TIMESTAMP_FIELD_NAME   = "timestamp"
+	_LOGGER_TIMESTAMP_FIELD_FORMAT = zerolog.TimeFormatUnix
+	_LOGGER_WRITER_SIZE            = 1000
+	_LOGGER_POLL_INTERVAL          = 10 * time.Millisecond
+	_LOGGER_FLUSH_DELAY            = _LOGGER_POLL_INTERVAL * 10
 )
 
-var (
-	_LOGGER_DEFAULT_DEV_LEVEL  = zerolog.DebugLevel
-	_LOGGER_DEFAULT_PROD_LEVEL = zerolog.InfoLevel
-)
+var _KlevelToZlevel = map[_level]zerolog.Level{
+	LvlTrace: zerolog.TraceLevel,
+	LvlDebug: zerolog.DebugLevel,
+	LvlInfo:  zerolog.InfoLevel,
+	LvlWarn:  zerolog.WarnLevel,
+	LvlError: zerolog.ErrorLevel,
+	LvlNone:  zerolog.Disabled,
+}
 
 type LoggerConfig struct {
-	Environment _environment
-	AppName     string
-	Level       *zerolog.Level
+	AppName string
+	Level   _level
 }
 
 type Logger struct {
@@ -42,50 +44,40 @@ type Logger struct {
 	out     io.Writer
 	prefix  string
 	header  string
-	level   zerolog.Level
+	level   _level
 	verbose bool
 }
 
 func NewLogger(config LoggerConfig) *Logger {
-	if config.Level == nil {
-		if config.Environment != EnvDevelopment {
-			config.Level = &_LOGGER_DEFAULT_PROD_LEVEL
-		} else {
-			config.Level = &_LOGGER_DEFAULT_DEV_LEVEL
-		}
-	}
-
 	zerolog.LevelFieldName = _LOGGER_LEVEL_FIELD_NAME
 	zerolog.MessageFieldName = _LOGGER_MESSAGE_FIELD_NAME
 	zerolog.TimestampFieldName = _LOGGER_TIMESTAMP_FIELD_NAME
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	zerolog.TimeFieldFormat = _LOGGER_TIMESTAMP_FIELD_FORMAT
 
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		file = "logger.go"
-	}
+	_, file, _, _ := runtime.Caller(0)
 
 	out := diode.NewWriter(os.Stdout, _LOGGER_WRITER_SIZE, _LOGGER_POLL_INTERVAL, func(missed int) {
 		fmt.Fprintf(os.Stdout,
 			"{\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":%d,\"%s\":\"Logger dropped %d messages\"}\n",
-			zerolog.LevelFieldName, zerolog.InfoLevel, _LOGGER_APP_FIELD_NAME,
+			zerolog.LevelFieldName, zerolog.ErrorLevel, _LOGGER_APP_FIELD_NAME,
 			config.AppName, _LOGGER_FILE_FIELD_NAME, file, zerolog.TimestampFieldName,
 			time.Now().Unix(), zerolog.MessageFieldName, missed)
 	})
 
 	// Do not use Caller hook as runtime.Caller makes the logger up to 2.6x slower
+	// TODO: check whether this is better than having file field with dup problem...
 	return &Logger{
 		logger: zerolog.New(out).With().
 			Str(_LOGGER_APP_FIELD_NAME, config.AppName).
 			Timestamp().
 			Logger().
-			Level(*config.Level),
+			Level(_KlevelToZlevel[config.Level]),
 		config:  config,
-		level:   *config.Level,
+		level:   config.Level,
 		out:     out,
 		prefix:  config.AppName,
 		header:  "",
-		verbose: *config.Level == zerolog.DebugLevel,
+		verbose: LvlDebug >= config.Level,
 	}
 }
 
@@ -172,34 +164,13 @@ func (self *Logger) SetPrefix(p string) {
 	self.prefix = p
 }
 
-func (self Logger) GLevel() gommon.Lvl {
-	return Utils.ZlevelToGlevel[self.level]
-}
-
-func (self *Logger) SetGLevel(l gommon.Lvl) {
-	zlevel := Utils.GlevelToZlevel[l]
-	self.logger = self.logger.Level(zlevel)
-	self.level = zlevel
-}
-
-func (self Logger) PLevel() pgx.LogLevel {
-	return Utils.ZlevelToPlevel[self.level]
-}
-
-func (self *Logger) SetPLevel(l pgx.LogLevel) {
-	zlevel := Utils.PlevelToZlevel[l]
-	self.logger = self.logger.Level(zlevel)
-	self.level = zlevel
-}
-
-func (self Logger) ZLevel() zerolog.Level {
+func (self Logger) Level() _level { // nolint
 	return self.level
 }
 
-func (self *Logger) SetZLevel(l zerolog.Level) {
-	zlevel := l
-	self.logger = self.logger.Level(zlevel)
-	self.level = zlevel
+func (self *Logger) SetLevel(l _level) {
+	self.logger = self.logger.Level(_KlevelToZlevel[l])
+	self.level = l
 }
 
 func (self *Logger) Header() string {
@@ -251,21 +222,20 @@ func (self Logger) Warnf(format string, i ...interface{}) {
 }
 
 func (self Logger) Error(i ...interface{}) {
-	if self.config.Environment == EnvProduction {
-		self.logger.Error().Msg(fmt.Sprint(i...))
-		return
-	}
-
-	for _, ie := range i {
-		switch err := ie.(type) {
-		case nil:
-		case *Error:
-			fmt.Printf("%+v\n", err.Unwrap()) // nolint
-		case *Exception:
-			fmt.Printf("%+v\n", err.Unwrap()) // nolint
-		default:
-			fmt.Printf("%+v\n", err) // nolint
+	if LvlDebug >= self.level {
+		for _, ie := range i {
+			switch err := ie.(type) {
+			case nil:
+			case *Error:
+				fmt.Printf("%+v\n", err.Unwrap()) // nolint
+			case *Exception:
+				fmt.Printf("%+v\n", err.Unwrap()) // nolint
+			default:
+				fmt.Printf("%+v\n", err) // nolint
+			}
 		}
+	} else {
+		self.logger.Error().Msg(fmt.Sprint(i...))
 	}
 }
 
