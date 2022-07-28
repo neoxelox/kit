@@ -37,38 +37,50 @@ var Environments = _environments{
 }
 
 type _errors struct {
-	ErrDeadlineExceeded        func() *Error
-	ErrLoggerGeneric           func() *Error
-	ErrLoggerTimedOut          func() *Error
-	ErrBinderGeneric           func() *Error
-	ErrExceptionHandlerGeneric func() *Error
-	ErrMigratorGeneric         func() *Error
-	ErrMigratorTimedOut        func() *Error
-	ErrObserverGeneric         func() *Error
-	ErrObserverTimedOut        func() *Error
-	ErrSerializerGeneric       func() *Error
-	ErrRendererGeneric         func() *Error
-	ErrLocalizerGeneric        func() *Error
-	ErrServerGeneric           func() *Error
-	ErrServerTimedOut          func() *Error
+	ErrDeadlineExceeded           func() *Error
+	ErrLoggerGeneric              func() *Error
+	ErrLoggerTimedOut             func() *Error
+	ErrBinderGeneric              func() *Error
+	ErrExceptionHandlerGeneric    func() *Error
+	ErrMigratorGeneric            func() *Error
+	ErrMigratorTimedOut           func() *Error
+	ErrObserverGeneric            func() *Error
+	ErrObserverTimedOut           func() *Error
+	ErrSerializerGeneric          func() *Error
+	ErrRendererGeneric            func() *Error
+	ErrLocalizerGeneric           func() *Error
+	ErrServerGeneric              func() *Error
+	ErrServerTimedOut             func() *Error
+	ErrDatabaseGeneric            func() *Error
+	ErrDatabaseTimedOut           func() *Error
+	ErrDatabaseUnhealthy          func() *Error
+	ErrDatabaseTransactionFailed  func() *Error
+	ErrDatabaseNoRows             func() *Error
+	ErrDatabaseIntegrityViolation func() *Error
 }
 
 // Errors contains the builtin errors.
 var Errors = _errors{
-	ErrDeadlineExceeded:        NewError("deadline exceeded"),
-	ErrLoggerGeneric:           NewError("logger failed"),
-	ErrLoggerTimedOut:          NewError("logger timed out"),
-	ErrBinderGeneric:           NewError("binder failed"),
-	ErrExceptionHandlerGeneric: NewError("error handler failed"),
-	ErrMigratorGeneric:         NewError("migrator failed"),
-	ErrMigratorTimedOut:        NewError("migrator timed out"),
-	ErrObserverGeneric:         NewError("observer failed"),
-	ErrObserverTimedOut:        NewError("observer timed out"),
-	ErrSerializerGeneric:       NewError("serializer failed"),
-	ErrRendererGeneric:         NewError("renderer failed"),
-	ErrLocalizerGeneric:        NewError("localizer failed"),
-	ErrServerGeneric:           NewError("server failed"),
-	ErrServerTimedOut:          NewError("server timed out"),
+	ErrDeadlineExceeded:           NewError("deadline exceeded"),
+	ErrLoggerGeneric:              NewError("logger failed"),
+	ErrLoggerTimedOut:             NewError("logger timed out"),
+	ErrBinderGeneric:              NewError("binder failed"),
+	ErrExceptionHandlerGeneric:    NewError("error handler failed"),
+	ErrMigratorGeneric:            NewError("migrator failed"),
+	ErrMigratorTimedOut:           NewError("migrator timed out"),
+	ErrObserverGeneric:            NewError("observer failed"),
+	ErrObserverTimedOut:           NewError("observer timed out"),
+	ErrSerializerGeneric:          NewError("serializer failed"),
+	ErrRendererGeneric:            NewError("renderer failed"),
+	ErrLocalizerGeneric:           NewError("localizer failed"),
+	ErrServerGeneric:              NewError("server failed"),
+	ErrServerTimedOut:             NewError("server timed out"),
+	ErrDatabaseGeneric:            NewError("database failed"),
+	ErrDatabaseTimedOut:           NewError("database timed out"),
+	ErrDatabaseUnhealthy:          NewError("database unhealthy"),
+	ErrDatabaseTransactionFailed:  NewError("database transaction failed"),
+	ErrDatabaseNoRows:             NewError("database no rows in result set"),
+	ErrDatabaseIntegrityViolation: NewError("database integrity constraint violation"),
 }
 
 type _exceptions struct {
@@ -236,9 +248,9 @@ func (self _utils) EqualStringSlice(first *[]string, second *[]string) bool {
 	return strset.SymmetricDifference(setFirst, setSecond).IsEmpty()
 }
 
-func (self _utils) Deadline(ctx context.Context, work func(exceeded <-chan struct{}) error) error {
+func (self _utils) Deadline(ctx context.Context, fn func(exceeded <-chan struct{}) error) error {
 	if ctxDeadline, ok := ctx.Deadline(); ok {
-		err := deadline.New(time.Until(ctxDeadline)).Run(work)
+		err := deadline.New(time.Until(ctxDeadline)).Run(fn)
 		if err == deadline.ErrTimedOut {
 			err = Errors.ErrDeadlineExceeded()
 		}
@@ -246,12 +258,12 @@ func (self _utils) Deadline(ctx context.Context, work func(exceeded <-chan struc
 		return err
 	}
 
-	return work(nil)
+	return fn(nil)
 }
 
 func (self _utils) Retry(
 	attempts int, delay time.Duration,
-	classifier retrier.Classifier, work func(attempt int) error) error {
+	classifier retrier.Classifier, fn func(attempt int) error) error {
 	// Go resiliency package does not count the first execution as an attempt
 	attempts--
 	if attempts < 0 {
@@ -263,7 +275,7 @@ func (self _utils) Retry(
 	// nolint
 	return retrier.New(retrier.ConstantBackoff(attempts, delay), classifier).
 		Run(func() error {
-			err := work(attempt)
+			err := fn(attempt)
 			attempt++
 
 			return err
@@ -272,7 +284,7 @@ func (self _utils) Retry(
 
 func (self _utils) ExponentialRetry(
 	attempts int, initialDelay time.Duration, limitDelay time.Duration,
-	classifier retrier.Classifier, work func(attempt int) error) error {
+	classifier retrier.Classifier, fn func(attempt int) error) error {
 	// Go resiliency package does not count the first execution as an attempt
 	attempts--
 	if attempts < 0 {
@@ -284,7 +296,7 @@ func (self _utils) ExponentialRetry(
 	// nolint
 	return retrier.New(retrier.LimitedExponentialBackoff(attempts, initialDelay, limitDelay), classifier).
 		Run(func() error {
-			err := work(attempt)
+			err := fn(attempt)
 			attempt++
 
 			return err

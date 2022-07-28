@@ -90,10 +90,10 @@ linters-settings:
   funlen:
     # Checks the number of lines in a function.
     # If lower than 0, disable the check.
-    lines: 80
+    lines: 100
     # Checks the number of statements in a function.
     # If lower than 0, disable the check.
-    statements: 60
+    statements: 80
 
   # Checks for package import order.
   gci:
@@ -218,6 +218,11 @@ linters-settings:
     # Minimal complexity of if statements to report.
     min-complexity: 5
 
+  nlreturn:
+    # Size of the block (including return statement that is still "OK")
+    # so no return split required.
+    block-size: 3
+
   # Checks for named returns.
   nonamedreturns:
     # Report named error if it is assigned inside defer.
@@ -252,7 +257,7 @@ linters-settings:
       - name: function-result-limit
         disabled: true
       - name: function-length
-        arguments: [60, 80]
+        arguments: [80, 100]
       - name: receiver-naming
         disabled: true
       - name: add-constant
@@ -332,6 +337,7 @@ linters:
     - testpackage
     - varnamelen
     - decorder
+    - gomnd
 
 # Options for issue availability.
 issues:

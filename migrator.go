@@ -83,7 +83,8 @@ func NewMigrator(ctx context.Context, observer Observer, config MigratorConfig) 
 			nil, func(attempt int) error {
 				var err error
 
-				observer.Infof("Trying to connect to the database %d/%d", attempt, config.RetryConfig.Attempts)
+				observer.Infof("Trying to connect to the %s database %d/%d",
+					config.DatabaseName, attempt, config.RetryConfig.Attempts)
 
 				migrator, err = migrate.New(*config.MigrationsPath, dsn)
 				if err != nil {
@@ -101,7 +102,7 @@ func NewMigrator(ctx context.Context, observer Observer, config MigratorConfig) 
 		return nil, Errors.ErrMigratorGeneric().Wrap(err)
 	}
 
-	observer.Info("Connected to the database")
+	observer.Infof("Connected to the %s database", config.DatabaseName)
 
 	migrator.Log = *_newMigrateLogger(observer.Logger)
 
@@ -190,7 +191,6 @@ func (self *Migrator) Apply(ctx context.Context, schemaVersion int) error {
 
 			if currentSchemaVersion == uint(schemaVersion) {
 				self.observer.Info("No migrations to apply")
-
 				return nil
 			}
 
@@ -258,7 +258,6 @@ func (self *Migrator) Rollback(ctx context.Context, schemaVersion int) error {
 
 			if currentSchemaVersion == uint(schemaVersion) {
 				self.observer.Info("No migrations to rollback")
-
 				return nil
 			}
 

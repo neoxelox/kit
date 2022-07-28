@@ -104,7 +104,6 @@ func _getCopies(
 
 	if locales < 1 {
 		observer.Info("No locales loaded")
-
 		return copiesByLang, nil
 	}
 

@@ -8,6 +8,7 @@ import (
 
 // TODO: Wrap and WrapAs just call WithDepth +1
 // TODO: dedup error messages
+// TODO: simplify all of this, maybe this is overkill that adds nothing
 
 type Error struct {
 	inner      error

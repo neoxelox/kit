@@ -253,7 +253,6 @@ func (self Logger) Warnf(format string, i ...interface{}) {
 func (self Logger) Error(i ...interface{}) {
 	if self.config.Environment == Environments.Production {
 		self.logger.Error().Msg(fmt.Sprint(i...))
-
 		return
 	}
 
