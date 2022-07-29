@@ -3,7 +3,6 @@ package kit
 import (
 	"context"
 	"fmt"
-	"runtime"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -55,16 +54,13 @@ func NewObserver(ctx context.Context, config ObserverConfig) (*Observer, error) 
 		Level:   config.Level,
 	})
 
-	_, file, _, _ := runtime.Caller(0)
-
 	if config.SentryConfig != nil {
 		// TODO: only retry on specific errors
 		err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
 			return Utils.ExponentialRetry(
 				config.RetryConfig.Attempts, config.RetryConfig.InitialDelay, config.RetryConfig.LimitDelay,
 				nil, func(attempt int) error {
-					logger.logger.Info().Str(_LOGGER_FILE_FIELD_NAME, file).
-						Msgf("Trying to connect to the Sentry service %d/%d", attempt, config.RetryConfig.Attempts)
+					logger.Infof("Trying to connect to the Sentry service %d/%d", attempt, config.RetryConfig.Attempts)
 
 					err := sentry.Init(sentry.ClientOptions{
 						Dsn:              config.SentryConfig.Dsn,
@@ -91,7 +87,7 @@ func NewObserver(ctx context.Context, config ObserverConfig) (*Observer, error) 
 			return nil, ErrObserverGeneric().Wrap(err)
 		}
 
-		logger.logger.Info().Str(_LOGGER_FILE_FIELD_NAME, file).Msg("Connected to the Sentry service")
+		logger.Info("Connected to the Sentry service")
 	}
 
 	return &Observer{
@@ -104,6 +100,38 @@ func (self *Observer) Anchor() {
 	self.Logger.SetFile(1)
 }
 
+func (self Observer) sendErrToSentry(i ...interface{}) {
+	if len(i) == 0 {
+		return
+	}
+
+	var sentryEvent *sentry.Event
+	var sentryEventExtra map[string]interface{}
+
+	switch err := i[0].(type) {
+	case nil:
+		return
+	case *Error:
+		sentryEvent, sentryEventExtra = errors.BuildSentryReport(err.Unwrap())
+	case *Exception:
+		sentryEvent, sentryEventExtra = errors.BuildSentryReport(err.Unwrap())
+	case error:
+		sentryEvent, sentryEventExtra = errors.BuildSentryReport(err)
+	default:
+		sentryEvent, sentryEventExtra = errors.BuildSentryReport(errors.NewWithDepth(2, fmt.Sprint(i...)))
+	}
+
+	for k, v := range sentryEventExtra {
+		sentryEvent.Extra[k] = v
+	}
+
+	sentryEvent.Level = sentry.LevelError
+
+	// TODO: enhance exception message and title
+
+	sentry.CaptureEvent(sentryEvent)
+}
+
 func (self Observer) Error(i ...interface{}) {
 	if !(LvlError >= self.config.Level) {
 		return
@@ -112,38 +140,68 @@ func (self Observer) Error(i ...interface{}) {
 	self.Logger.Error(i...)
 
 	if self.config.SentryConfig != nil {
-		for _, ie := range i {
-			var sentryEvent *sentry.Event
-			var sentryEventExtra map[string]interface{}
-
-			switch err := ie.(type) {
-			case nil:
-				continue
-			case *Error:
-				sentryEvent, sentryEventExtra = errors.BuildSentryReport(err.Unwrap())
-			case *Exception:
-				sentryEvent, sentryEventExtra = errors.BuildSentryReport(err.Unwrap())
-			case error:
-				sentryEvent, sentryEventExtra = errors.BuildSentryReport(err)
-			default:
-				sentryEvent, sentryEventExtra = errors.BuildSentryReport(errors.Errorf("%+v", err))
-			}
-
-			for k, v := range sentryEventExtra {
-				sentryEvent.Extra[k] = v
-			}
-
-			sentryEvent.Level = sentry.LevelError
-
-			// TODO: enhance exception message and title
-
-			sentry.CaptureEvent(sentryEvent)
-		}
+		self.sendErrToSentry(i...)
 	}
 }
 
 func (self Observer) Errorf(format string, i ...interface{}) {
-	self.Error(fmt.Sprintf(format, i...))
+	if !(LvlError >= self.config.Level) {
+		return
+	}
+
+	self.Logger.Errorf(format, i...)
+
+	if self.config.SentryConfig != nil {
+		self.sendErrToSentry(fmt.Sprintf(format, i...))
+	}
+}
+
+func (self Observer) Fatal(i ...interface{}) {
+	if !(LvlError >= self.config.Level) {
+		return
+	}
+
+	self.Logger.Fatal(i...)
+
+	if self.config.SentryConfig != nil {
+		self.sendErrToSentry(i...)
+	}
+}
+
+func (self Observer) Fatalf(format string, i ...interface{}) {
+	if !(LvlError >= self.config.Level) {
+		return
+	}
+
+	self.Logger.Fatalf(format, i...)
+
+	if self.config.SentryConfig != nil {
+		self.sendErrToSentry(fmt.Sprintf(format, i...))
+	}
+}
+
+func (self Observer) Panic(i ...interface{}) {
+	if !(LvlError >= self.config.Level) {
+		return
+	}
+
+	self.Logger.Panic(i...)
+
+	if self.config.SentryConfig != nil {
+		self.sendErrToSentry(i...)
+	}
+}
+
+func (self Observer) Panicf(format string, i ...interface{}) {
+	if !(LvlError >= self.config.Level) {
+		return
+	}
+
+	self.Logger.Panicf(format, i...)
+
+	if self.config.SentryConfig != nil {
+		self.sendErrToSentry(fmt.Sprintf(format, i...))
+	}
 }
 
 // TODO
@@ -189,9 +247,7 @@ func (self Observer) Flush(ctx context.Context) error {
 
 func (self Observer) Close(ctx context.Context) error {
 	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
-		_, file, _, _ := runtime.Caller(0)
-
-		self.logger.Info().Str(_LOGGER_FILE_FIELD_NAME, file).Msg("Closing observer")
+		self.Logger.Info("Closing observer")
 
 		err := self.Flush(ctx)
 		if err != nil {
@@ -200,8 +256,8 @@ func (self Observer) Close(ctx context.Context) error {
 
 		if self.config.SentryConfig != nil {
 			// Dummy log in order to mantain consistency although Sentry has no close() method
-			self.logger.Info().Str(_LOGGER_FILE_FIELD_NAME, file).Msg("Closing Sentry service")
-			self.logger.Info().Str(_LOGGER_FILE_FIELD_NAME, file).Msg("Closed Sentry service")
+			self.Logger.Info("Closing Sentry service")
+			self.Logger.Info("Closed Sentry service")
 		}
 
 		err = self.Logger.Close(ctx)
@@ -209,7 +265,7 @@ func (self Observer) Close(ctx context.Context) error {
 			return ErrObserverGeneric().WrapAs(err)
 		}
 
-		self.logger.Info().Str(_LOGGER_FILE_FIELD_NAME, file).Msg("Closed observer")
+		self.Logger.Info("Closed observer")
 
 		return nil
 	})

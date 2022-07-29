@@ -108,9 +108,7 @@ func (self Logger) Flush(ctx context.Context) error {
 
 func (self Logger) Close(ctx context.Context) error {
 	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
-		_, file, _, _ := runtime.Caller(0)
-
-		self.logger.Info().Str(_LOGGER_FILE_FIELD_NAME, file).Msg("Closing logger")
+		self.Info("Closing logger")
 
 		err := self.Flush(ctx)
 		if err != nil {
@@ -127,7 +125,7 @@ func (self Logger) Close(ctx context.Context) error {
 			return ErrLoggerGeneric().WrapAs(err)
 		}
 
-		self.logger.Info().Str(_LOGGER_FILE_FIELD_NAME, file).Msg("Closed logger")
+		self.Info("Closed logger")
 
 		return nil
 	})
@@ -194,27 +192,27 @@ func (self *Logger) SetVerbose(v bool) {
 }
 
 func (self Logger) Print(i ...interface{}) {
-	self.logger.Log().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msg(fmt.Sprint(i...))
+	self.logger.Log().Msg(fmt.Sprint(i...))
 }
 
 func (self Logger) Printf(format string, i ...interface{}) {
-	self.logger.Log().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msgf(format, i...)
+	self.logger.Log().Msgf(format, i...)
 }
 
 func (self Logger) Debug(i ...interface{}) {
-	self.logger.Debug().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msg(fmt.Sprint(i...))
+	self.logger.Debug().Msg(fmt.Sprint(i...))
 }
 
 func (self Logger) Debugf(format string, i ...interface{}) {
-	self.logger.Debug().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msgf(format, i...)
+	self.logger.Debug().Msgf(format, i...)
 }
 
 func (self Logger) Info(i ...interface{}) {
-	self.logger.Info().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msg(fmt.Sprint(i...))
+	self.logger.Info().Msg(fmt.Sprint(i...))
 }
 
 func (self Logger) Infof(format string, i ...interface{}) {
-	self.logger.Info().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msgf(format, i...)
+	self.logger.Info().Msgf(format, i...)
 }
 
 func (self Logger) Warn(i ...interface{}) {
@@ -225,40 +223,103 @@ func (self Logger) Warnf(format string, i ...interface{}) {
 	self.logger.Warn().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msgf(format, i...)
 }
 
+func (self Logger) printDebugError(i ...interface{}) {
+	if len(i) >= 1 {
+		switch err := i[0].(type) {
+		case *Error:
+			fmt.Printf("\x1b[91m%+v\x1b[0m\n", err.Unwrap()) // nolint
+			i = i[1:]
+		case *Exception:
+			fmt.Printf("\x1b[91m%+v\x1b[0m\n", err.Unwrap()) // nolint
+			i = i[1:]
+		}
+	}
+
+	if len(i) == 0 {
+		return
+	}
+
+	fmt.Printf("\x1b[91m%s\x1b[0m\n", fmt.Sprint(i...)) // nolint
+}
+
 func (self Logger) Error(i ...interface{}) {
 	if LvlDebug >= self.level {
-		for _, ie := range i {
-			switch err := ie.(type) {
-			case nil:
-			case *Error:
-				fmt.Printf("%+v\n", err.Unwrap()) // nolint
-			case *Exception:
-				fmt.Printf("%+v\n", err.Unwrap()) // nolint
-			default:
-				fmt.Printf("%+v\n", err) // nolint
-			}
-		}
+		self.printDebugError(i...)
 	} else {
 		self.logger.Error().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msg(fmt.Sprint(i...))
 	}
 }
 
 func (self Logger) Errorf(format string, i ...interface{}) {
-	self.logger.Error().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msgf(format, i...)
+	if LvlDebug >= self.level {
+		self.printDebugError(fmt.Sprintf(format, i...))
+	} else {
+		self.logger.Error().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msgf(format, i...)
+	}
 }
 
 func (self Logger) Fatal(i ...interface{}) {
-	self.logger.Fatal().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msg(fmt.Sprint(i...))
+	if LvlDebug >= self.level {
+		self.printDebugError(i...)
+		os.Exit(1) // nolint
+	} else { // nolint
+		self.logger.Fatal().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msg(fmt.Sprint(i...))
+	}
 }
 
 func (self Logger) Fatalf(format string, i ...interface{}) {
-	self.logger.Fatal().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msgf(format, i...)
+	if LvlDebug >= self.level {
+		self.printDebugError(fmt.Sprintf(format, i...))
+		os.Exit(1) // nolint
+	} else { // nolint
+		self.logger.Fatal().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msgf(format, i...)
+	}
 }
 
 func (self Logger) Panic(i ...interface{}) {
-	self.logger.Panic().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msg(fmt.Sprint(i...))
+	if LvlDebug >= self.level {
+		self.printDebugError(i...)
+		panic(fmt.Sprint(i...))
+	} else {
+		self.logger.Panic().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msg(fmt.Sprint(i...))
+	}
 }
 
 func (self Logger) Panicf(format string, i ...interface{}) {
-	self.logger.Panic().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msgf(format, i...)
+	if LvlDebug >= self.level {
+		self.printDebugError(fmt.Sprintf(format, i...))
+		panic(fmt.Sprintf(format, i...))
+	} else {
+		self.logger.Panic().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msgf(format, i...)
+	}
+}
+
+func (self Logger) WithLevel(level _level, i ...interface{}) {
+	switch level {
+	case LvlTrace:
+		self.Print(i...)
+	case LvlDebug:
+		self.Debug(i...)
+	case LvlInfo:
+		self.Info(i...)
+	case LvlWarn:
+		self.Warn(i...)
+	case LvlError:
+		self.Error(i...)
+	}
+}
+
+func (self Logger) WithLevelf(level _level, format string, i ...interface{}) {
+	switch level {
+	case LvlTrace:
+		self.Printf(format, i...)
+	case LvlDebug:
+		self.Debugf(format, i...)
+	case LvlInfo:
+		self.Infof(format, i...)
+	case LvlWarn:
+		self.Warnf(format, i...)
+	case LvlError:
+		self.Errorf(format, i...)
+	}
 }

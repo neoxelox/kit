@@ -13,7 +13,6 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/leporo/sqlf"
 	"github.com/randallmlough/pgxscan"
-	"github.com/rs/zerolog"
 )
 
 const (
@@ -119,8 +118,8 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig) 
 	poolConfig.ConnConfig.RuntimeParams["standard_conforming_strings"] = "on"
 	poolConfig.ConnConfig.RuntimeParams["application_name"] = config.AppName
 
-	pgxLogger := _newPgxLogger(&observer.Logger)
-	pgxLogLevel := _KlevelToPlevel[pgxLogger.logger.Level()]
+	pgxLogger := _newPgxLogger(&observer)
+	pgxLogLevel := _KlevelToPlevel[pgxLogger.observer.Level()]
 
 	// PGX Info level is too much! (PGX levels are reversed)
 	if pgxLogLevel >= pgx.LogLevelInfo {
@@ -357,25 +356,25 @@ func (self *Database) Close(ctx context.Context) error {
 	}
 }
 
-var _PlevelToZlevel = map[pgx.LogLevel]zerolog.Level{
-	pgx.LogLevelTrace: zerolog.TraceLevel,
-	pgx.LogLevelDebug: zerolog.DebugLevel,
-	pgx.LogLevelInfo:  zerolog.InfoLevel,
-	pgx.LogLevelWarn:  zerolog.WarnLevel,
-	pgx.LogLevelError: zerolog.ErrorLevel,
-	pgx.LogLevelNone:  zerolog.Disabled,
+var _PlevelToKlevel = map[pgx.LogLevel]_level{
+	pgx.LogLevelTrace: LvlTrace,
+	pgx.LogLevelDebug: LvlDebug,
+	pgx.LogLevelInfo:  LvlInfo,
+	pgx.LogLevelWarn:  LvlWarn,
+	pgx.LogLevelError: LvlError,
+	pgx.LogLevelNone:  LvlNone,
 }
 
 type _pgxLogger struct {
-	logger *Logger
+	observer *Observer
 }
 
-func _newPgxLogger(logger *Logger) *_pgxLogger {
+func _newPgxLogger(observer *Observer) *_pgxLogger {
 	return &_pgxLogger{
-		logger: logger,
+		observer: observer,
 	}
 }
 
 func (self _pgxLogger) Log(ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{}) { // nolint
-	self.logger.Logger().WithLevel(_PlevelToZlevel[level]).Fields(data).Msg(msg)
+	self.observer.WithLevelf(_PlevelToKlevel[level], "%s: %+v", msg, data)
 }

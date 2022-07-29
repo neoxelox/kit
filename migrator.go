@@ -104,7 +104,7 @@ func NewMigrator(ctx context.Context, observer Observer, config MigratorConfig) 
 
 	observer.Infof("Connected to the %s database", config.DatabaseName)
 
-	migrator.Log = _newMigrateLogger(&observer.Logger)
+	migrator.Log = _newMigrateLogger(&observer)
 
 	done := make(chan struct{}, 1)
 	close(done)
@@ -335,18 +335,17 @@ func (self *Migrator) Close(ctx context.Context) error {
 }
 
 type _migrateLogger struct {
-	logger *Logger
+	observer *Observer
 }
 
-func _newMigrateLogger(logger *Logger) *_migrateLogger {
+func _newMigrateLogger(observer *Observer) *_migrateLogger {
 	return &_migrateLogger{
-		logger: logger,
+		observer: observer,
 	}
 }
 
 func (self _migrateLogger) Printf(format string, v ...interface{}) {
-	format = strings.TrimSpace(format)
-	self.logger.Infof(format, v...)
+	self.observer.Infof(strings.TrimSpace(format), v...)
 }
 
 func (self _migrateLogger) Verbose() bool {
