@@ -2,6 +2,7 @@
 
 **`Highly opitionated Go backend kit.`**
 
-TODO: A TABLE WITH EVERY PROGRAMMING ASPECT AND THE kit.<Object> you have to use or the library you should use
-
-TODO: DOCUMENTATION AND COMMENTS
+- TODO: TODOS
+- TODO: A TABLE WITH EVERY GO PROGRAMMING ASPECT AND THE kit.<Object> or library you should use
+- TODO: DOCUMENTATION AND COMMENTS ON EVERY EXPORTED VARIABLE OR FUNCTION
+- TODO: UNIT TESTS
