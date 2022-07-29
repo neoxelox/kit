@@ -3,6 +3,7 @@ package kit
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -54,13 +55,16 @@ func NewObserver(ctx context.Context, config ObserverConfig) (*Observer, error) 
 		Level:   config.Level,
 	})
 
+	_, file, _, _ := runtime.Caller(0)
+
 	if config.SentryConfig != nil {
 		// TODO: only retry on specific errors
 		err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
 			return Utils.ExponentialRetry(
 				config.RetryConfig.Attempts, config.RetryConfig.InitialDelay, config.RetryConfig.LimitDelay,
 				nil, func(attempt int) error {
-					logger.Infof("Trying to connect to the Sentry service %d/%d", attempt, config.RetryConfig.Attempts)
+					logger.logger.Info().Str(_LOGGER_FILE_FIELD_NAME, file).
+						Msgf("Trying to connect to the Sentry service %d/%d", attempt, config.RetryConfig.Attempts)
 
 					err := sentry.Init(sentry.ClientOptions{
 						Dsn:              config.SentryConfig.Dsn,
@@ -87,7 +91,7 @@ func NewObserver(ctx context.Context, config ObserverConfig) (*Observer, error) 
 			return nil, ErrObserverGeneric().Wrap(err)
 		}
 
-		logger.Info("Connected to the Sentry service")
+		logger.logger.Info().Str(_LOGGER_FILE_FIELD_NAME, file).Msg("Connected to the Sentry service")
 	}
 
 	return &Observer{
@@ -97,7 +101,7 @@ func NewObserver(ctx context.Context, config ObserverConfig) (*Observer, error) 
 }
 
 func (self *Observer) Anchor() {
-	self.Logger.SetFile(2)
+	self.Logger.SetFile(1)
 }
 
 func (self Observer) Error(i ...interface{}) {
@@ -185,7 +189,9 @@ func (self Observer) Flush(ctx context.Context) error {
 
 func (self Observer) Close(ctx context.Context) error {
 	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
-		self.Logger.Info("Closing observer")
+		_, file, _, _ := runtime.Caller(0)
+
+		self.logger.Info().Str(_LOGGER_FILE_FIELD_NAME, file).Msg("Closing observer")
 
 		err := self.Flush(ctx)
 		if err != nil {
@@ -194,8 +200,8 @@ func (self Observer) Close(ctx context.Context) error {
 
 		if self.config.SentryConfig != nil {
 			// Dummy log in order to mantain consistency although Sentry has no close() method
-			self.Logger.Info("Closing Sentry service")
-			self.Logger.Info("Closed Sentry service")
+			self.logger.Info().Str(_LOGGER_FILE_FIELD_NAME, file).Msg("Closing Sentry service")
+			self.logger.Info().Str(_LOGGER_FILE_FIELD_NAME, file).Msg("Closed Sentry service")
 		}
 
 		err = self.Logger.Close(ctx)
@@ -203,7 +209,7 @@ func (self Observer) Close(ctx context.Context) error {
 			return ErrObserverGeneric().WrapAs(err)
 		}
 
-		self.Logger.Info("Closed observer")
+		self.logger.Info().Str(_LOGGER_FILE_FIELD_NAME, file).Msg("Closed observer")
 
 		return nil
 	})

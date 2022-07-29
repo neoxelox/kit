@@ -39,11 +39,12 @@ type LoggerConfig struct {
 }
 
 type Logger struct {
-	logger  zerolog.Logger
+	logger  *zerolog.Logger
 	config  LoggerConfig
 	out     io.Writer
 	prefix  string
 	header  string
+	file    string
 	level   _level
 	verbose bool
 }
@@ -65,28 +66,26 @@ func NewLogger(config LoggerConfig) *Logger {
 	})
 
 	// Do not use Caller hook as runtime.Caller makes the logger up to 2.6x slower
-	// TODO: check whether this is better than having file field with dup problem...
+	logger := zerolog.New(out).With().
+		Str(_LOGGER_APP_FIELD_NAME, config.AppName).
+		Timestamp().
+		Logger().
+		Level(_KlevelToZlevel[config.Level])
+
 	return &Logger{
-		logger: zerolog.New(out).With().
-			Str(_LOGGER_APP_FIELD_NAME, config.AppName).
-			Timestamp().
-			Logger().
-			Level(_KlevelToZlevel[config.Level]),
+		logger:  &logger,
 		config:  config,
 		level:   config.Level,
-		out:     out,
+		out:     &out,
 		prefix:  config.AppName,
 		header:  "",
+		file:    "",
 		verbose: LvlDebug >= config.Level,
 	}
 }
 
 func (self Logger) Logger() *zerolog.Logger {
-	return &self.logger
-}
-
-func (self *Logger) SetLogger(l zerolog.Logger) {
-	self.logger = l
+	return self.logger
 }
 
 func (self Logger) Flush(ctx context.Context) error {
@@ -109,14 +108,16 @@ func (self Logger) Flush(ctx context.Context) error {
 
 func (self Logger) Close(ctx context.Context) error {
 	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
-		self.logger.Info().Msg("Closing logger")
+		_, file, _, _ := runtime.Caller(0)
+
+		self.logger.Info().Str(_LOGGER_FILE_FIELD_NAME, file).Msg("Closing logger")
 
 		err := self.Flush(ctx)
 		if err != nil {
 			return ErrLoggerGeneric().WrapAs(err)
 		}
 
-		writer, ok := self.out.(diode.Writer)
+		writer, ok := self.out.(*diode.Writer)
 		if !ok {
 			panic("logger writer is not diode")
 		}
@@ -126,7 +127,7 @@ func (self Logger) Close(ctx context.Context) error {
 			return ErrLoggerGeneric().WrapAs(err)
 		}
 
-		self.logger.Info().Msg("Closed logger")
+		self.logger.Info().Str(_LOGGER_FILE_FIELD_NAME, file).Msg("Closed logger")
 
 		return nil
 	})
@@ -140,10 +141,13 @@ func (self Logger) Close(ctx context.Context) error {
 	}
 }
 
-// TODO: dedup file field
+func (self Logger) File() string {
+	return self.file
+}
+
 func (self *Logger) SetFile(frames int) {
-	if _, file, _, ok := runtime.Caller(frames); ok {
-		self.logger = self.logger.With().Str(_LOGGER_FILE_FIELD_NAME, file).Logger()
+	if _, file, _, ok := runtime.Caller(frames + 1); ok {
+		self.file = file
 	}
 }
 
@@ -152,7 +156,7 @@ func (self Logger) Output() io.Writer {
 }
 
 func (self *Logger) SetOutput(w io.Writer) {
-	self.logger = self.logger.Output(w)
+	*self.logger = self.logger.Output(w)
 	self.out = w
 }
 
@@ -169,7 +173,7 @@ func (self Logger) Level() _level { // nolint
 }
 
 func (self *Logger) SetLevel(l _level) {
-	self.logger = self.logger.Level(_KlevelToZlevel[l])
+	*self.logger = self.logger.Level(_KlevelToZlevel[l])
 	self.level = l
 }
 
@@ -190,35 +194,35 @@ func (self *Logger) SetVerbose(v bool) {
 }
 
 func (self Logger) Print(i ...interface{}) {
-	self.logger.Log().Msg(fmt.Sprint(i...))
+	self.logger.Log().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msg(fmt.Sprint(i...))
 }
 
 func (self Logger) Printf(format string, i ...interface{}) {
-	self.logger.Log().Msgf(format, i...)
+	self.logger.Log().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msgf(format, i...)
 }
 
 func (self Logger) Debug(i ...interface{}) {
-	self.logger.Debug().Msg(fmt.Sprint(i...))
+	self.logger.Debug().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msg(fmt.Sprint(i...))
 }
 
 func (self Logger) Debugf(format string, i ...interface{}) {
-	self.logger.Debug().Msgf(format, i...)
+	self.logger.Debug().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msgf(format, i...)
 }
 
 func (self Logger) Info(i ...interface{}) {
-	self.logger.Info().Msg(fmt.Sprint(i...))
+	self.logger.Info().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msg(fmt.Sprint(i...))
 }
 
 func (self Logger) Infof(format string, i ...interface{}) {
-	self.logger.Info().Msgf(format, i...)
+	self.logger.Info().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msgf(format, i...)
 }
 
 func (self Logger) Warn(i ...interface{}) {
-	self.logger.Warn().Msg(fmt.Sprint(i...))
+	self.logger.Warn().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msg(fmt.Sprint(i...))
 }
 
 func (self Logger) Warnf(format string, i ...interface{}) {
-	self.logger.Warn().Msgf(format, i...)
+	self.logger.Warn().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msgf(format, i...)
 }
 
 func (self Logger) Error(i ...interface{}) {
@@ -235,26 +239,26 @@ func (self Logger) Error(i ...interface{}) {
 			}
 		}
 	} else {
-		self.logger.Error().Msg(fmt.Sprint(i...))
+		self.logger.Error().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msg(fmt.Sprint(i...))
 	}
 }
 
 func (self Logger) Errorf(format string, i ...interface{}) {
-	self.logger.Error().Msgf(format, i...)
+	self.logger.Error().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msgf(format, i...)
 }
 
 func (self Logger) Fatal(i ...interface{}) {
-	self.logger.Fatal().Msg(fmt.Sprint(i...))
+	self.logger.Fatal().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msg(fmt.Sprint(i...))
 }
 
 func (self Logger) Fatalf(format string, i ...interface{}) {
-	self.logger.Fatal().Msgf(format, i...)
+	self.logger.Fatal().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msgf(format, i...)
 }
 
 func (self Logger) Panic(i ...interface{}) {
-	self.logger.Panic().Msg(fmt.Sprint(i...))
+	self.logger.Panic().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msg(fmt.Sprint(i...))
 }
 
 func (self Logger) Panicf(format string, i ...interface{}) {
-	self.logger.Panic().Msgf(format, i...)
+	self.logger.Panic().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msgf(format, i...)
 }

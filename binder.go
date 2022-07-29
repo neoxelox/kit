@@ -8,7 +8,7 @@ type BinderConfig struct {
 }
 
 type Binder struct {
-	binder   echo.DefaultBinder
+	binder   *echo.DefaultBinder
 	config   BinderConfig
 	observer Observer
 }
@@ -19,7 +19,7 @@ func NewBinder(observer Observer, config BinderConfig) *Binder {
 	return &Binder{
 		observer: observer,
 		config:   config,
-		binder:   echo.DefaultBinder{},
+		binder:   &echo.DefaultBinder{},
 	}
 }
 

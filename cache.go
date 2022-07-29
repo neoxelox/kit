@@ -101,7 +101,7 @@ func NewCache(ctx context.Context, observer Observer, config CacheConfig) (*Cach
 		}
 	}
 
-	redis.SetLogger(_newRedisLogger(observer.Logger))
+	redis.SetLogger(_newRedisLogger(&observer.Logger))
 
 	dsn := fmt.Sprintf(_CACHE_REDIS_DSN, config.CacheHost, config.CachePort)
 
@@ -267,10 +267,10 @@ func (self *Cache) Close(ctx context.Context) error {
 }
 
 type _redisLogger struct {
-	logger Logger
+	logger *Logger
 }
 
-func _newRedisLogger(logger Logger) *_redisLogger {
+func _newRedisLogger(logger *Logger) *_redisLogger {
 	return &_redisLogger{
 		logger: logger,
 	}

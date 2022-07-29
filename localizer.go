@@ -31,7 +31,7 @@ type LocalizerConfig struct {
 type Localizer struct {
 	config   LocalizerConfig
 	observer Observer
-	copies   map[language.Tag]map[string]string
+	copies   *map[language.Tag]map[string]string
 }
 
 func NewLocalizer(observer Observer, config LocalizerConfig) (*Localizer, error) {
@@ -59,7 +59,7 @@ func NewLocalizer(observer Observer, config LocalizerConfig) (*Localizer, error)
 
 func _getCopies(
 	observer *Observer, localesPath string,
-	localeExtensions *regexp.Regexp) (map[language.Tag]map[string]string, error) {
+	localeExtensions *regexp.Regexp) (*map[language.Tag]map[string]string, error) {
 	copiesByLang := make(map[language.Tag]map[string]string)
 
 	err := filepath.WalkDir(localesPath, func(path string, info fs.DirEntry, err error) error {
@@ -104,7 +104,7 @@ func _getCopies(
 
 	if locales < 1 {
 		observer.Info("No locales loaded")
-		return copiesByLang, nil
+		return &copiesByLang, nil
 	}
 
 	langs := make([]string, 0, locales)
@@ -114,7 +114,7 @@ func _getCopies(
 
 	observer.Infof("Loaded %d locales: %v", locales, strings.Join(langs, ", "))
 
-	return copiesByLang, nil
+	return &copiesByLang, nil
 }
 
 func (self *Localizer) Refresh() error {
@@ -143,11 +143,11 @@ func (self Localizer) GetLocale(ctx context.Context) language.Tag {
 func (self Localizer) Localize(ctx context.Context, copy string, i ...interface{}) string { // nolint
 	copy = strings.ToUpper(copy) // nolint
 
-	if trans, ok := self.copies[self.GetLocale(ctx)][copy]; ok {
+	if trans, ok := (*self.copies)[self.GetLocale(ctx)][copy]; ok {
 		return fmt.Sprintf(trans, i...)
 	}
 
-	if trans, ok := self.copies[self.config.DefaultLocale][copy]; ok {
+	if trans, ok := (*self.copies)[self.config.DefaultLocale][copy]; ok {
 		return fmt.Sprintf(trans, i...)
 	}
 

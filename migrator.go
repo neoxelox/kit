@@ -43,7 +43,7 @@ type MigratorConfig struct {
 type Migrator struct {
 	config   MigratorConfig
 	observer Observer
-	migrator migrate.Migrate
+	migrator *migrate.Migrate
 	done     chan struct{}
 }
 
@@ -104,7 +104,7 @@ func NewMigrator(ctx context.Context, observer Observer, config MigratorConfig) 
 
 	observer.Infof("Connected to the %s database", config.DatabaseName)
 
-	migrator.Log = *_newMigrateLogger(observer.Logger)
+	migrator.Log = _newMigrateLogger(&observer.Logger)
 
 	done := make(chan struct{}, 1)
 	close(done)
@@ -112,7 +112,7 @@ func NewMigrator(ctx context.Context, observer Observer, config MigratorConfig) 
 	return &Migrator{
 		observer: observer,
 		config:   config,
-		migrator: *migrator,
+		migrator: migrator,
 		done:     done,
 	}, nil
 }
@@ -335,10 +335,10 @@ func (self *Migrator) Close(ctx context.Context) error {
 }
 
 type _migrateLogger struct {
-	logger Logger
+	logger *Logger
 }
 
-func _newMigrateLogger(logger Logger) *_migrateLogger {
+func _newMigrateLogger(logger *Logger) *_migrateLogger {
 	return &_migrateLogger{
 		logger: logger,
 	}

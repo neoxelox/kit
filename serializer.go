@@ -11,7 +11,7 @@ type SerializerConfig struct {
 
 type Serializer struct {
 	config     SerializerConfig
-	serializer echo.DefaultJSONSerializer
+	serializer *echo.DefaultJSONSerializer
 	observer   Observer
 }
 
@@ -21,7 +21,7 @@ func NewSerializer(observer Observer, config SerializerConfig) *Serializer {
 	return &Serializer{
 		config:     config,
 		observer:   observer,
-		serializer: echo.DefaultJSONSerializer{},
+		serializer: &echo.DefaultJSONSerializer{},
 	}
 }
 

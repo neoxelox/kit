@@ -119,7 +119,7 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig) 
 	poolConfig.ConnConfig.RuntimeParams["standard_conforming_strings"] = "on"
 	poolConfig.ConnConfig.RuntimeParams["application_name"] = config.AppName
 
-	pgxLogger := _newPgxLogger(observer.Logger)
+	pgxLogger := _newPgxLogger(&observer.Logger)
 	pgxLogLevel := _KlevelToPlevel[pgxLogger.logger.Level()]
 
 	// PGX Info level is too much! (PGX levels are reversed)
@@ -367,10 +367,10 @@ var _PlevelToZlevel = map[pgx.LogLevel]zerolog.Level{
 }
 
 type _pgxLogger struct {
-	logger Logger
+	logger *Logger
 }
 
-func _newPgxLogger(logger Logger) *_pgxLogger {
+func _newPgxLogger(logger *Logger) *_pgxLogger {
 	return &_pgxLogger{
 		logger: logger,
 	}
