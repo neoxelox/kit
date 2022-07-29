@@ -69,6 +69,10 @@ var (
 	ErrDatabaseTransactionFailed  = NewError("database transaction failed")
 	ErrDatabaseNoRows             = NewError("database no rows in result set")
 	ErrDatabaseIntegrityViolation = NewError("database integrity constraint violation")
+	ErrCacheGeneric               = NewError("cache failed")
+	ErrCacheTimedOut              = NewError("cache timed out")
+	ErrCacheUnhealthy             = NewError("cache unhealthy")
+	ErrCacheMiss                  = NewError("cache key not found")
 )
 
 // Builtin exceptions.

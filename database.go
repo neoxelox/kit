@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"runtime"
 	"time"
 
 	"github.com/jackc/pgconn"
@@ -21,10 +22,12 @@ const (
 )
 
 var (
-	_DATABASE_DEFAULT_MIN_CONNS           = 1
-	_DATABASE_DEFAULT_MAX_CONNS           = 4
-	_DATABASE_DEFAULT_MAX_CONN_IDLE_TIME  = 30 * time.Minute
-	_DATABASE_DEFAULT_MAX_CONN_LIFE_TIME  = 1 * time.Hour
+	_DATABASE_DEFAULT_MIN_CONNS          = 1
+	_DATABASE_DEFAULT_MAX_CONNS          = 1 * runtime.GOMAXPROCS(-1)
+	_DATABASE_DEFAULT_MAX_CONN_IDLE_TIME = 30 * time.Minute
+	_DATABASE_DEFAULT_MAX_CONN_LIFE_TIME = 1 * time.Hour
+	// _DATABASEDEFAULT_DIAL_TIMEOUT  = 30 * time.Second // TODO: check where this goes
+	// _DATABASE_DEFAULT_ACQUIRE_TIMEOUT  = 30 * time.Second // TODO: check where this goes
 	_DATABASE_DEFAULT_RETRY_ATTEMPTS      = 1
 	_DATABASE_DEFAULT_RETRY_INITIAL_DELAY = 0 * time.Second
 	_DATABASE_DEFAULT_RETRY_LIMIT_DELAY   = 0 * time.Second
@@ -144,6 +147,11 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig) 
 					return ErrDatabaseGeneric().WrapAs(err)
 				}
 
+				err = pool.Ping(ctx)
+				if err != nil {
+					return ErrDatabaseGeneric().WrapAs(err)
+				}
+
 				return nil
 			})
 	})
@@ -179,14 +187,8 @@ func (self *Database) Health(ctx context.Context) error {
 			return ErrDatabaseUnhealthy().WrapAs(err)
 		}
 
-		rows, err := self.pool.Query(ctx, `SELECT true;`)
+		err = ctx.Err()
 		if err != nil {
-			return ErrDatabaseUnhealthy().WrapAs(err)
-		}
-
-		var ok bool
-		err = pgxscan.NewScanner(rows).Scan(&ok)
-		if err != nil || !ok {
 			return ErrDatabaseUnhealthy().WrapAs(err)
 		}
 
