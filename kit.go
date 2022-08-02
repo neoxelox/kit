@@ -82,7 +82,7 @@ var (
 	// ExcServerUnavailable server Unavailable exception.
 	ExcServerUnavailable = NewException(http.StatusServiceUnavailable, "ERR_SERVER_UNAVAILABLE")
 	// ExcRequestTimeout request timeout exception.
-	ExcRequestTimeout = NewException(http.StatusRequestTimeout, "ERR_REQUEST_TIMEOUT")
+	ExcRequestTimeout = NewException(http.StatusGatewayTimeout, "ERR_REQUEST_TIMEOUT")
 	// ExcClientGeneric generic client exception.
 	ExcClientGeneric = NewException(http.StatusBadRequest, "ERR_CLIENT_GENERIC")
 	// ExcInvalidRequest invalid request exception.
