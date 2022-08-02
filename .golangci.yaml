@@ -95,17 +95,6 @@ linters-settings:
     # If lower than 0, disable the check.
     statements: 100
 
-  # Checks for package import order.
-  gci:
-    # Section configuration to compare against.
-    # Section names are case-insensitive and may contain parameters in ().
-    # The order of sections is always `standard > default > custom`,
-    # it cannot be changed and doesn't follow the order of `sections` option.
-    sections:
-      - standard # Standard section: captures all standard packages.
-      - default # Default section: contains all imports that could not be matched to another section type.
-      - prefix(github.com/neoxelox/kit) # Custom section: groups all imports with the specified Prefix.
-
   # Checks the cognitive complexity of functions.
   gocognit:
     # Minimal code complexity to report
@@ -338,6 +327,7 @@ linters:
     - varnamelen
     - decorder
     - gomnd
+    - gci
 
 # Options for issue availability.
 issues:

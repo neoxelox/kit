@@ -34,7 +34,7 @@ func (self *Observer) Handle(next echo.HandlerFunc) echo.HandlerFunc {
 		request := ctx.Request()
 		start := time.Now()
 
-		next(ctx)
+		next(ctx) // nolint
 
 		stop := time.Now()
 		response := ctx.Response()
