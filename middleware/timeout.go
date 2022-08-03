@@ -28,8 +28,6 @@ type Timeout struct {
 }
 
 func NewTimeout(observer kit.Observer, config TimeoutConfig) *Timeout {
-	observer.Anchor()
-
 	return &Timeout{
 		config:   config,
 		observer: observer,

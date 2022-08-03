@@ -16,8 +16,6 @@ type Exception struct {
 }
 
 func NewException(observer kit.Observer, config ExceptionConfig) *Exception {
-	observer.Anchor()
-
 	return &Exception{
 		config:   config,
 		observer: observer,

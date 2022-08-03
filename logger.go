@@ -13,15 +13,16 @@ import (
 )
 
 const (
-	_LOGGER_LEVEL_FIELD_NAME       = "level"
-	_LOGGER_MESSAGE_FIELD_NAME     = "message"
-	_LOGGER_APP_FIELD_NAME         = "app"
-	_LOGGER_FILE_FIELD_NAME        = "file"
-	_LOGGER_TIMESTAMP_FIELD_NAME   = "timestamp"
-	_LOGGER_TIMESTAMP_FIELD_FORMAT = zerolog.TimeFormatUnix
-	_LOGGER_WRITER_SIZE            = 1000
-	_LOGGER_POLL_INTERVAL          = 10 * time.Millisecond
-	_LOGGER_FLUSH_DELAY            = _LOGGER_POLL_INTERVAL * 10
+	_LOGGER_DEFAULT_SKIP_FRAME_COUNT = 1
+	_LOGGER_LEVEL_FIELD_NAME         = "level"
+	_LOGGER_MESSAGE_FIELD_NAME       = "message"
+	_LOGGER_APP_FIELD_NAME           = "app"
+	_LOGGER_TIMESTAMP_FIELD_NAME     = "timestamp"
+	_LOGGER_TIMESTAMP_FIELD_FORMAT   = zerolog.TimeFormatUnix
+	_LOGGER_CALLER_FIELD_NAME        = "caller"
+	_LOGGER_WRITER_SIZE              = 1000
+	_LOGGER_POLL_INTERVAL            = 10 * time.Millisecond
+	_LOGGER_FLUSH_DELAY              = _LOGGER_POLL_INTERVAL * 10
 )
 
 var _KlevelToZlevel = map[_level]zerolog.Level{
@@ -34,19 +35,20 @@ var _KlevelToZlevel = map[_level]zerolog.Level{
 }
 
 type LoggerConfig struct {
-	AppName string
-	Level   _level
+	AppName        string
+	Level          _level
+	SkipFrameCount *int
 }
 
 type Logger struct {
-	logger  *zerolog.Logger
-	config  LoggerConfig
-	out     io.Writer
-	prefix  string
-	header  string
-	file    string
-	level   _level
-	verbose bool
+	logger         *zerolog.Logger
+	config         LoggerConfig
+	out            io.Writer
+	prefix         string
+	header         string
+	level          _level
+	verbose        bool
+	skipFrameCount int
 }
 
 func NewLogger(config LoggerConfig) *Logger {
@@ -54,14 +56,19 @@ func NewLogger(config LoggerConfig) *Logger {
 	zerolog.MessageFieldName = _LOGGER_MESSAGE_FIELD_NAME
 	zerolog.TimestampFieldName = _LOGGER_TIMESTAMP_FIELD_NAME
 	zerolog.TimeFieldFormat = _LOGGER_TIMESTAMP_FIELD_FORMAT
+	zerolog.CallerFieldName = _LOGGER_CALLER_FIELD_NAME
 
-	_, file, _, _ := runtime.Caller(0)
+	if config.SkipFrameCount == nil {
+		config.SkipFrameCount = ptr(_LOGGER_DEFAULT_SKIP_FRAME_COUNT)
+	}
+
+	_, file, line, _ := runtime.Caller(0)
 
 	out := diode.NewWriter(os.Stdout, _LOGGER_WRITER_SIZE, _LOGGER_POLL_INTERVAL, func(missed int) {
 		fmt.Fprintf(os.Stdout,
-			"{\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":%d,\"%s\":\"Logger dropped %d messages\"}\n",
+			"{\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":\"%s:%d\",\"%s\":%d,\"%s\":\"Logger dropped %d messages\"}\n",
 			zerolog.LevelFieldName, zerolog.ErrorLevel, _LOGGER_APP_FIELD_NAME,
-			config.AppName, _LOGGER_FILE_FIELD_NAME, file, zerolog.TimestampFieldName,
+			config.AppName, zerolog.CallerFieldName, file, line, zerolog.TimestampFieldName,
 			time.Now().Unix(), zerolog.MessageFieldName, missed)
 	})
 
@@ -73,14 +80,14 @@ func NewLogger(config LoggerConfig) *Logger {
 		Level(_KlevelToZlevel[config.Level])
 
 	return &Logger{
-		logger:  &logger,
-		config:  config,
-		level:   config.Level,
-		out:     &out,
-		prefix:  config.AppName,
-		header:  "",
-		file:    "",
-		verbose: LvlDebug >= config.Level,
+		logger:         &logger,
+		config:         config,
+		level:          config.Level,
+		out:            &out,
+		prefix:         config.AppName,
+		header:         "",
+		verbose:        LvlDebug >= config.Level,
+		skipFrameCount: *config.SkipFrameCount,
 	}
 }
 
@@ -136,16 +143,6 @@ func (self Logger) Close(ctx context.Context) error {
 		return ErrLoggerTimedOut()
 	default:
 		return ErrLoggerGeneric().Wrap(err)
-	}
-}
-
-func (self Logger) File() string {
-	return self.file
-}
-
-func (self *Logger) SetFile(frames int) {
-	if _, file, _, ok := runtime.Caller(frames + 1); ok {
-		self.file = file
 	}
 }
 
@@ -216,11 +213,11 @@ func (self Logger) Infof(format string, i ...interface{}) {
 }
 
 func (self Logger) Warn(i ...interface{}) {
-	self.logger.Warn().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msg(fmt.Sprint(i...))
+	self.logger.Warn().Caller(self.skipFrameCount).Msg(fmt.Sprint(i...))
 }
 
 func (self Logger) Warnf(format string, i ...interface{}) {
-	self.logger.Warn().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msgf(format, i...)
+	self.logger.Warn().Caller(self.skipFrameCount).Msgf(format, i...)
 }
 
 func (self Logger) printDebugError(i ...interface{}) {
@@ -246,7 +243,7 @@ func (self Logger) Error(i ...interface{}) {
 	if LvlDebug >= self.level {
 		self.printDebugError(i...)
 	} else {
-		self.logger.Error().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msg(fmt.Sprint(i...))
+		self.logger.Error().Caller(self.skipFrameCount).Msg(fmt.Sprint(i...))
 	}
 }
 
@@ -254,7 +251,7 @@ func (self Logger) Errorf(format string, i ...interface{}) {
 	if LvlDebug >= self.level {
 		self.printDebugError(fmt.Sprintf(format, i...))
 	} else {
-		self.logger.Error().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msgf(format, i...)
+		self.logger.Error().Caller(self.skipFrameCount).Msgf(format, i...)
 	}
 }
 
@@ -263,7 +260,7 @@ func (self Logger) Fatal(i ...interface{}) {
 		self.printDebugError(i...)
 		os.Exit(1) // nolint
 	} else { // nolint
-		self.logger.Fatal().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msg(fmt.Sprint(i...))
+		self.logger.Fatal().Caller(self.skipFrameCount).Msg(fmt.Sprint(i...))
 	}
 }
 
@@ -272,7 +269,7 @@ func (self Logger) Fatalf(format string, i ...interface{}) {
 		self.printDebugError(fmt.Sprintf(format, i...))
 		os.Exit(1) // nolint
 	} else { // nolint
-		self.logger.Fatal().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msgf(format, i...)
+		self.logger.Fatal().Caller(self.skipFrameCount).Msgf(format, i...)
 	}
 }
 
@@ -281,7 +278,7 @@ func (self Logger) Panic(i ...interface{}) {
 		self.printDebugError(i...)
 		panic(fmt.Sprint(i...))
 	} else {
-		self.logger.Panic().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msg(fmt.Sprint(i...))
+		self.logger.Panic().Caller(self.skipFrameCount).Msg(fmt.Sprint(i...))
 	}
 }
 
@@ -290,7 +287,7 @@ func (self Logger) Panicf(format string, i ...interface{}) {
 		self.printDebugError(fmt.Sprintf(format, i...))
 		panic(fmt.Sprintf(format, i...))
 	} else {
-		self.logger.Panic().Str(_LOGGER_FILE_FIELD_NAME, self.file).Msgf(format, i...)
+		self.logger.Panic().Caller(self.skipFrameCount).Msgf(format, i...)
 	}
 }
 

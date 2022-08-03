@@ -48,8 +48,6 @@ type Migrator struct {
 }
 
 func NewMigrator(ctx context.Context, observer Observer, config MigratorConfig) (*Migrator, error) {
-	observer.Anchor()
-
 	if config.MigrationsPath == nil {
 		config.MigrationsPath = ptr(_MIGRATOR_DEFAULT_MIGRATIONS_PATH)
 	}

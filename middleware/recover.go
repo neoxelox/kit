@@ -21,8 +21,6 @@ type Recover struct {
 }
 
 func NewRecover(observer kit.Observer, config RecoverConfig) *Recover {
-	observer.Anchor()
-
 	return &Recover{
 		config:   config,
 		observer: observer,

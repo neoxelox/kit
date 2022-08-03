@@ -14,8 +14,6 @@ type Binder struct {
 }
 
 func NewBinder(observer Observer, config BinderConfig) *Binder {
-	observer.Anchor()
-
 	return &Binder{
 		observer: observer,
 		config:   config,

@@ -37,8 +37,6 @@ type Server struct {
 
 func NewServer(observer Observer, serializer Serializer, binder Binder,
 	renderer Renderer, exceptionHandler ExceptionHandler, config ServerConfig) *Server {
-	observer.Anchor()
-
 	if config.RequestHeaderMaxSize == nil {
 		config.RequestHeaderMaxSize = ptr(_SERVER_DEFAULT_REQUEST_HEADER_MAX_SIZE)
 	}

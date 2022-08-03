@@ -59,8 +59,6 @@ type Cache struct {
 }
 
 func NewCache(ctx context.Context, observer Observer, config CacheConfig) (*Cache, error) {
-	observer.Anchor()
-
 	if config.CacheMinConns == nil {
 		config.CacheMinConns = ptr(_CACHE_DEFAULT_MIN_CONNS)
 	}

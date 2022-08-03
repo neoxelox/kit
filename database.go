@@ -70,8 +70,6 @@ type Database struct {
 }
 
 func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig) (*Database, error) {
-	observer.Anchor()
-
 	if config.DatabaseMinConns == nil {
 		config.DatabaseMinConns = ptr(_DATABASE_DEFAULT_MIN_CONNS)
 	}

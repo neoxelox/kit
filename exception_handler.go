@@ -16,8 +16,6 @@ type ExceptionHandler struct {
 }
 
 func NewExceptionHandler(observer Observer, config ExceptionHandlerConfig) *ExceptionHandler {
-	observer.Anchor()
-
 	return &ExceptionHandler{
 		observer: observer,
 		config:   config,

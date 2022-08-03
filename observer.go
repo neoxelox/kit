@@ -50,8 +50,9 @@ func NewObserver(ctx context.Context, config ObserverConfig) (*Observer, error) 
 	}
 
 	logger := NewLogger(LoggerConfig{
-		AppName: config.AppName,
-		Level:   config.Level,
+		AppName:        config.AppName,
+		Level:          config.Level,
+		SkipFrameCount: ptr(2),
 	})
 
 	if config.SentryConfig != nil {
@@ -96,8 +97,14 @@ func NewObserver(ctx context.Context, config ObserverConfig) (*Observer, error) 
 	}, nil
 }
 
-func (self *Observer) Anchor() {
-	self.Logger.SetFile(1)
+func (self Observer) Warn(i ...interface{}) {
+	// Observer must wrap Warn because of skip frame count on caller
+	self.Logger.Warn(i...)
+}
+
+func (self Observer) Warnf(format string, i ...interface{}) {
+	// Observer must wrap Warnf because of skip frame count on caller
+	self.Logger.Warnf(format, i...)
 }
 
 func (self Observer) sendErrToSentry(i ...interface{}) {

@@ -21,8 +21,6 @@ type Observer struct {
 }
 
 func NewObserver(observer kit.Observer, config ObserverConfig) *Observer {
-	observer.Anchor()
-
 	return &Observer{
 		config:   config,
 		observer: observer,

@@ -16,8 +16,6 @@ type Serializer struct {
 }
 
 func NewSerializer(observer Observer, config SerializerConfig) *Serializer {
-	observer.Anchor()
-
 	return &Serializer{
 		config:     config,
 		observer:   observer,

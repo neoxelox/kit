@@ -35,8 +35,6 @@ type Localizer struct {
 }
 
 func NewLocalizer(observer Observer, config LocalizerConfig) (*Localizer, error) {
-	observer.Anchor()
-
 	if config.LocalesPath == nil {
 		config.LocalesPath = ptr(_LOCALIZER_DEFAULT_LOCALES_PATH)
 	}

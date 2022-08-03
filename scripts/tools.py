@@ -6,7 +6,7 @@ from .tags import Tags
 class Tools(superinvoke.Tools):
     Go = superinvoke.Tool(
         name="go",
-        version="1.18.4",
+        version="1.19",
         tags=[Tags.ALL],
         path="go",
     )
@@ -39,12 +39,12 @@ class Tools(superinvoke.Tools):
 
     Lint = superinvoke.Tool(
         name="golangci-lint",
-        version="1.46.2",
+        version="1.47.3",
         tags=[Tags.ALL],
         links={
             superinvoke.Platforms.LINUX: (
-                "https://github.com/golangci/golangci-lint/releases/download/v1.46.2/golangci-lint-1.46.2-linux-amd64.tar.gz",
-                "golangci-lint-1.46.2-linux-amd64/golangci-lint",
+                "https://github.com/golangci/golangci-lint/releases/download/v1.47.3/golangci-lint-1.47.3-linux-amd64.tar.gz",
+                "golangci-lint-1.47.3-linux-amd64/golangci-lint",
             ),
         },
     )

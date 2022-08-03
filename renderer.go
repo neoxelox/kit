@@ -29,8 +29,6 @@ type Renderer struct {
 }
 
 func NewRenderer(observer Observer, config RendererConfig) (*Renderer, error) {
-	observer.Anchor()
-
 	if config.TemplatesPath == nil {
 		config.TemplatesPath = ptr(_RENDERER_DEFAULT_TEMPLATES_PATH)
 	}
