@@ -8,7 +8,7 @@ import (
 	"github.com/neoxelox/kit"
 )
 
-// TODO: dump request/response body and headers for easy debug tracing in logs
+// TODO: dump request/response body, params and headers for easy debug tracing in logs
 // TODO: set request to sentry scope
 
 type ObserverConfig struct {
@@ -45,6 +45,7 @@ func (self *Observer) Handle(next echo.HandlerFunc) echo.HandlerFunc {
 		stop := time.Now()
 
 		self.observer.Logger.Logger().Info().
+			Str("host", request.Host).
 			Str("method", request.Method).
 			Str("path", request.RequestURI).
 			Int("status", response.Status).

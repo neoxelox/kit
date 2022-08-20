@@ -1,4 +1,4 @@
-# kit
+# kit ![Integration](https://github.com/Neoxelox/kit/workflows/Integration/badge.svg) ![Publication](https://github.com/Neoxelox/kit/workflows/Publication/badge.svg) [![Go Reference](https://pkg.go.dev/badge/github.com/neoxelox/kit.svg)](https://pkg.go.dev/github.com/neoxelox/kit)
 
 **`Highly opitionated Go backend kit.`**
 
