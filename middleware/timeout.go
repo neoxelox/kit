@@ -151,6 +151,7 @@ func (self *Timeout) handleFinished(ctx *_timeoutHandlerCtx) {
 	ctx.bufferPool.Put(ctx.buffer)
 }
 
+// TODO: could we just switch to original writer and return http.ErrHandlerTimeout upwards?
 func (self *Timeout) handleTimeout(ctx *_timeoutHandlerCtx) {
 	ctx.timeoutWriter.mutex.Lock()
 	defer ctx.timeoutWriter.mutex.Unlock()

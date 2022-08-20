@@ -26,6 +26,13 @@ func (self *Exception) Handle(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
 		err := next(ctx)
 		if err != nil {
+			// If request was already committed it means another middleware or an actual view
+			// has already called the exception handler or written an appropriate response,
+			// but we should send the error upwards to cover the case the handler timed out.
+			if ctx.Response().Committed {
+				return err
+			}
+
 			// Handle, serialize and write exception response
 			ctx.Error(err)
 		}
