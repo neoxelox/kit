@@ -2,7 +2,7 @@ name: Publication
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   publication:
@@ -10,18 +10,25 @@ jobs:
     steps:
       - name: Checkout 🛎️
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Git ✨
+        run: |
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
 
       - name: Setup Python 🐍
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
-          cache: 'pip'
+          python-version: "3.10"
+          cache: "pip"
 
       - name: Setup Scripts 🧩
         run: |
           pip install -r scripts/requirements.txt
-          inv env.switch prod
-          inv tool.install prod
+          inv env.switch ci
+          inv tool.install ci-pub --yes
 
       - name: Publish 🚀
         run: inv publish

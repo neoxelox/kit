@@ -13,7 +13,7 @@ class Envs(superinvoke.Envs):
 
     Ci = superinvoke.Env(
         name="ci",
-        tags=[Tags.CI],
+        tags=[Tags.CI_INT, Tags.CI_PUB],
     )
 
     Prod = superinvoke.Env(

@@ -3,10 +3,12 @@ package kit
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/getsentry/sentry-go"
+	"github.com/neoxelox/gilk"
 )
 
 var (
@@ -26,12 +28,17 @@ type ObserverSentryConfig struct {
 	Dsn string
 }
 
+type ObserverGilkConfig struct {
+	Port int
+}
+
 type ObserverConfig struct {
 	Environment  _environment
 	Release      string
 	AppName      string
 	Level        _level
 	SentryConfig *ObserverSentryConfig
+	GilkConfig   *ObserverGilkConfig
 	RetryConfig  *ObserverRetryConfig
 }
 
@@ -89,6 +96,22 @@ func NewObserver(ctx context.Context, config ObserverConfig) (*Observer, error) 
 		}
 
 		logger.Info("Connected to the Sentry service")
+	}
+
+	if config.GilkConfig != nil {
+		logger.Info("Starting the Gilk service")
+
+		// Skip 3 dataframes when using observer in database wrapper, otherwise 2
+		gilk.SkippedStackFrames = 3
+
+		go func() {
+			err := gilk.Serve(fmt.Sprintf(":%d", config.GilkConfig.Port))
+			if err != nil && err != http.ErrServerClosed {
+				logger.Error(ErrObserverGeneric().Wrap(err))
+			}
+		}()
+
+		logger.Infof("Started the Gilk service at port %d", config.GilkConfig.Port)
 	}
 
 	return &Observer{
@@ -217,8 +240,40 @@ func (self Observer) Metric() {
 }
 
 // TODO
-func (self Observer) Trace() func() {
-	return func() {}
+func (self Observer) Trace(ctx context.Context) (context.Context, func()) {
+	return ctx, func() {}
+}
+
+func (self Observer) TraceRequest(ctx context.Context, request *http.Request) (context.Context, func()) {
+	var endGilkRequest func()
+
+	if self.config.GilkConfig != nil {
+		ctx, endGilkRequest = gilk.NewContext(ctx, request.URL.Path, request.Method)
+	}
+
+	return ctx, func() {
+		if self.config.GilkConfig != nil {
+			endGilkRequest()
+		}
+	}
+}
+
+func (self Observer) TraceQuery(ctx context.Context, sql string, args ...interface{}) (context.Context, func()) {
+	var endGilkQuery func()
+
+	if self.config.GilkConfig != nil {
+		dArgs := make([]interface{}, len(args))
+
+		copy(dArgs, args)
+
+		ctx, endGilkQuery = gilk.NewQuery(ctx, sql, dArgs...)
+	}
+
+	return ctx, func() {
+		if self.config.GilkConfig != nil {
+			endGilkQuery()
+		}
+	}
 }
 
 func (self Observer) Flush(ctx context.Context) error {
@@ -238,6 +293,10 @@ func (self Observer) Flush(ctx context.Context) error {
 			if !ok {
 				return ErrObserverGeneric().With("sentry lost events while flushing")
 			}
+		}
+
+		if self.config.GilkConfig != nil {
+			gilk.Reset()
 		}
 
 		return nil
@@ -265,6 +324,12 @@ func (self Observer) Close(ctx context.Context) error {
 			// Dummy log in order to mantain consistency although Sentry has no close() method
 			self.Logger.Info("Closing Sentry service")
 			self.Logger.Info("Closed Sentry service")
+		}
+
+		if self.config.GilkConfig != nil {
+			// Dummy log in order to mantain consistency although Gilk has no close() method
+			self.Logger.Info("Closing Gilk service")
+			self.Logger.Info("Closed Gilk service")
 		}
 
 		err = self.Logger.Close(ctx)

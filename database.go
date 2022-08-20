@@ -226,13 +226,20 @@ func _dbErrToError(err error) *Error {
 func (self *Database) Query(ctx context.Context, stmt *sqlf.Stmt) error {
 	defer stmt.Close()
 
+	sql := stmt.String()
+	args := stmt.Args()
+	dest := stmt.Dest()
+
+	ctx, endTraceQuery := self.observer.TraceQuery(ctx, sql, args...)
+	defer endTraceQuery()
+
 	var rows pgx.Rows
 	var err error
 
 	if ctx.Value(_DATABASE_TRANSACTION_CTX_KEY) != nil {
-		rows, err = ctx.Value(_DATABASE_TRANSACTION_CTX_KEY).(pgx.Tx).Query(ctx, stmt.String(), stmt.Args()...)
+		rows, err = ctx.Value(_DATABASE_TRANSACTION_CTX_KEY).(pgx.Tx).Query(ctx, sql, args...)
 	} else {
-		rows, err = self.pool.Query(ctx, stmt.String(), stmt.Args()...)
+		rows, err = self.pool.Query(ctx, sql, args...)
 	}
 
 	if err != nil {
@@ -244,7 +251,7 @@ func (self *Database) Query(ctx context.Context, stmt *sqlf.Stmt) error {
 		return _dbErrToError(err)
 	}
 
-	err = pgxscan.NewScanner(rows).Scan(stmt.Dest()...)
+	err = pgxscan.NewScanner(rows).Scan(dest...)
 	if err != nil {
 		return _dbErrToError(err)
 	}
@@ -255,13 +262,19 @@ func (self *Database) Query(ctx context.Context, stmt *sqlf.Stmt) error {
 func (self *Database) Exec(ctx context.Context, stmt *sqlf.Stmt) (int, error) {
 	defer stmt.Close()
 
+	sql := stmt.String()
+	args := stmt.Args()
+
+	ctx, endTraceQuery := self.observer.TraceQuery(ctx, sql, args...)
+	defer endTraceQuery()
+
 	var command pgconn.CommandTag
 	var err error
 
 	if ctx.Value(_DATABASE_TRANSACTION_CTX_KEY) != nil {
-		command, err = ctx.Value(_DATABASE_TRANSACTION_CTX_KEY).(pgx.Tx).Exec(ctx, stmt.String(), stmt.Args()...)
+		command, err = ctx.Value(_DATABASE_TRANSACTION_CTX_KEY).(pgx.Tx).Exec(ctx, sql, args...)
 	} else {
-		command, err = self.pool.Exec(ctx, stmt.String(), stmt.Args()...)
+		command, err = self.pool.Exec(ctx, sql, args...)
 	}
 
 	if err != nil {

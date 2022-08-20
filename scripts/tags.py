@@ -3,5 +3,6 @@ import superinvoke
 
 class Tags(superinvoke.Tags):
     DEV = "dev"
-    CI = "ci"
+    CI_INT = "ci-int"
+    CI_PUB = "ci-pub"
     PROD = "prod"

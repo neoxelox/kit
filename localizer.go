@@ -75,7 +75,7 @@ func _getCopies(
 
 		lang, err := language.Parse(info.Name()[:len(info.Name())-len(filepath.Ext(info.Name()))])
 		if err != nil {
-			return nil
+			return nil // nolint
 		}
 
 		file, err := ioutil.ReadFile(path)

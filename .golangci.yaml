@@ -173,14 +173,6 @@ linters-settings:
     # Require the use of a single 'import' declaration only.
     import-require-single-import: true
 
-  # Checks for large if-statements syntax.
-  ifshort:
-    # Maximum length of variable declaration measured in number of lines, after which linter won't suggest using short syntax.
-    # Has higher priority than max-decl-chars.
-    max-decl-lines: 1
-    # Maximum length of variable declaration measured in number of characters, after which linter won't suggest using short syntax.
-    max-decl-chars: 30
-
   # Checks for long lines.
   lll:
     # Max line length, lines longer will be reported.
@@ -273,7 +265,7 @@ linters-settings:
       rules:
         # Any struct tag type can be used.
         # Support string case: `camel`, `pascal`, `kebab`, `snake`, `goCamel`, `goPascal`, `goKebab`, `goSnake`, `upper`, `lower`
-        json: camel
+        json: snake
         yaml: camel
         xml: camel
         bson: camel
@@ -328,6 +320,8 @@ linters:
     - decorder
     - gomnd
     - gci
+    - ifshort
+    - nosnakecase
 
 # Options for issue availability.
 issues:

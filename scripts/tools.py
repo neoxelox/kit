@@ -27,11 +27,11 @@ class Tools(superinvoke.Tools):
 
     Test = superinvoke.Tool(
         name="gotestsum",
-        version="1.8.1",
-        tags=[Tags.ALL],
+        version="1.8.2",
+        tags=[Tags.DEV, Tags.CI_INT],
         links={
             superinvoke.Platforms.LINUX: (
-                "https://github.com/gotestyourself/gotestsum/releases/download/v1.8.1/gotestsum_1.8.1_linux_amd64.tar.gz",
+                "https://github.com/gotestyourself/gotestsum/releases/download/v1.8.2/gotestsum_1.8.2_linux_amd64.tar.gz",
                 "gotestsum",
             ),
         },
@@ -39,12 +39,12 @@ class Tools(superinvoke.Tools):
 
     Lint = superinvoke.Tool(
         name="golangci-lint",
-        version="1.47.3",
-        tags=[Tags.ALL],
+        version="1.48.0",
+        tags=[Tags.DEV, Tags.CI_INT],
         links={
             superinvoke.Platforms.LINUX: (
-                "https://github.com/golangci/golangci-lint/releases/download/v1.47.3/golangci-lint-1.47.3-linux-amd64.tar.gz",
-                "golangci-lint-1.47.3-linux-amd64/golangci-lint",
+                "https://github.com/golangci/golangci-lint/releases/download/v1.48.0/golangci-lint-1.48.0-linux-amd64.tar.gz",
+                "golangci-lint-1.48.0-linux-amd64/golangci-lint",
             ),
         },
     )

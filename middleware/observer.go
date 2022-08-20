@@ -29,13 +29,20 @@ func NewObserver(observer kit.Observer, config ObserverConfig) *Observer {
 
 func (self *Observer) Handle(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
-		request := ctx.Request()
 		start := time.Now()
+
+		traceCtx, endTraceRequest := self.observer.TraceRequest(ctx.Request().Context(), ctx.Request())
+		defer endTraceRequest()
+
+		ctx.SetRequest(ctx.Request().WithContext(traceCtx))
+
+		request := ctx.Request()
 
 		next(ctx) // nolint
 
-		stop := time.Now()
 		response := ctx.Response()
+
+		stop := time.Now()
 
 		self.observer.Logger.Logger().Info().
 			Str("method", request.Method).

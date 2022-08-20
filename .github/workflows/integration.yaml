@@ -2,7 +2,7 @@ name: Integration
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   integration:
@@ -14,20 +14,20 @@ jobs:
       - name: Setup Go 🐻
         uses: actions/setup-go@v3
         with:
-          go-version: '1.19'
+          go-version: "1.19"
           cache: true
 
       - name: Setup Python 🐍
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
-          cache: 'pip'
+          python-version: "3.10"
+          cache: "pip"
 
       - name: Setup Scripts 🧩
         run: |
           pip install -r scripts/requirements.txt
           inv env.switch ci
-          inv tool.install ci
+          inv tool.install ci-int --yes
 
       - name: Lint 🪶
         run: inv lint
