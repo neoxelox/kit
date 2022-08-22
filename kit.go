@@ -23,9 +23,15 @@ func ptr[T any](v T) *T {
 	return &v
 }
 
-type _ctxKey string
+type _key string
 
-const _BASE_CTX_KEY _ctxKey = "kit:"
+// Builtin context/cache keys.
+var (
+	KeyBase                _key = "kit:"
+	KeyDatabaseTransaction _key = KeyBase + "database:transaction"
+	KeyLocalizerLocale     _key = KeyBase + "localizer:locale"
+	KeyTraceID             _key = KeyBase + "trace:id"
+)
 
 type _environment string
 

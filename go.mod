@@ -17,6 +17,7 @@ require (
 	github.com/leporo/sqlf v1.3.0
 	github.com/neoxelox/gilk v0.4.0
 	github.com/randallmlough/pgxscan v0.3.0
+	github.com/rs/xid v1.3.0
 	github.com/rs/zerolog v1.27.0
 	github.com/scylladb/go-set v1.0.2
 	golang.org/x/text v0.3.7

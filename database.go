@@ -16,8 +16,7 @@ import (
 )
 
 const (
-	_DATABASE_POSTGRES_DSN        = "postgresql://%s:%s@%s:%d/%s?sslmode=%s"
-	_DATABASE_TRANSACTION_CTX_KEY = _BASE_CTX_KEY + "database:transaction"
+	_DATABASE_POSTGRES_DSN = "postgresql://%s:%s@%s:%d/%s?sslmode=%s"
 )
 
 var (
@@ -236,8 +235,8 @@ func (self *Database) Query(ctx context.Context, stmt *sqlf.Stmt) error {
 	var rows pgx.Rows
 	var err error
 
-	if ctx.Value(_DATABASE_TRANSACTION_CTX_KEY) != nil {
-		rows, err = ctx.Value(_DATABASE_TRANSACTION_CTX_KEY).(pgx.Tx).Query(ctx, sql, args...)
+	if ctx.Value(KeyDatabaseTransaction) != nil {
+		rows, err = ctx.Value(KeyDatabaseTransaction).(pgx.Tx).Query(ctx, sql, args...)
 	} else {
 		rows, err = self.pool.Query(ctx, sql, args...)
 	}
@@ -271,8 +270,8 @@ func (self *Database) Exec(ctx context.Context, stmt *sqlf.Stmt) (int, error) {
 	var command pgconn.CommandTag
 	var err error
 
-	if ctx.Value(_DATABASE_TRANSACTION_CTX_KEY) != nil {
-		command, err = ctx.Value(_DATABASE_TRANSACTION_CTX_KEY).(pgx.Tx).Exec(ctx, sql, args...)
+	if ctx.Value(KeyDatabaseTransaction) != nil {
+		command, err = ctx.Value(KeyDatabaseTransaction).(pgx.Tx).Exec(ctx, sql, args...)
 	} else {
 		command, err = self.pool.Exec(ctx, sql, args...)
 	}
@@ -290,7 +289,7 @@ func (self *Database) Exec(ctx context.Context, stmt *sqlf.Stmt) (int, error) {
 }
 
 func (self *Database) Transaction(ctx context.Context, fn func(ctx context.Context) error) error {
-	if ctx.Value(_DATABASE_TRANSACTION_CTX_KEY) != nil {
+	if ctx.Value(KeyDatabaseTransaction) != nil {
 		err := fn(ctx)
 		if err != nil {
 			return ErrDatabaseTransactionFailed().WrapAs(err)
@@ -320,7 +319,7 @@ func (self *Database) Transaction(ctx context.Context, fn func(ctx context.Conte
 		}
 	}()
 
-	err = fn(context.WithValue(ctx, _DATABASE_TRANSACTION_CTX_KEY, transaction))
+	err = fn(context.WithValue(ctx, KeyDatabaseTransaction, transaction))
 	if err != nil {
 		errR := transaction.Rollback(ctx)
 		return ErrDatabaseTransactionFailed().Wrap(Utils.CombineErrors(err, errR))

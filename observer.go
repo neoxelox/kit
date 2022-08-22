@@ -4,11 +4,24 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"runtime"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/getsentry/sentry-go"
 	"github.com/neoxelox/gilk"
+	"github.com/rs/xid"
+)
+
+// TODO: fix caller func name ".func1"?
+// TODO: fix unnamed Sentry spans
+// TODO: fix path params in transaction names
+// TODO: add NewRelic for APM and events
+// TODO: add OpenTelemetry for tracing instead of Sentry/NewRelic?
+
+const (
+	_OBSERVER_REQUEST_TRACE_ID_HEADER = "X-Trace-Id"
+	_OBSERVER_SENTRY_TRACE_ID_TAG     = "trace_id"
 )
 
 var (
@@ -78,7 +91,7 @@ func NewObserver(ctx context.Context, config ObserverConfig) (*Observer, error) 
 						Debug:            false,
 						AttachStacktrace: false, // Already done by errors package
 						SampleRate:       1.0,   // Error events
-						TracesSampleRate: 0,     // Transaction events. TODO: activate?
+						TracesSampleRate: 0.25,  // Transaction events
 					})
 					if err != nil {
 						return ErrObserverGeneric().WrapAs(err)
@@ -159,6 +172,7 @@ func (self Observer) sendErrToSentry(i ...interface{}) {
 
 	// TODO: enhance exception message and title
 
+	// sentryHub.CaptureEvent() // TODO: important use the hub from context!
 	sentry.CaptureEvent(sentryEvent)
 }
 
@@ -236,32 +250,115 @@ func (self Observer) Panicf(format string, i ...interface{}) {
 
 // TODO
 func (self Observer) Metric() {
-
 }
 
-// TODO
-func (self Observer) Trace(ctx context.Context) (context.Context, func()) {
-	return ctx, func() {}
+func (self Observer) SetTrace(ctx context.Context, traceID xid.ID) context.Context {
+	return context.WithValue(ctx, KeyTraceID, traceID)
+}
+
+func (self Observer) GetTrace(ctx context.Context) xid.ID {
+	if ctxTraceID, ok := ctx.Value(KeyTraceID).(xid.ID); ok {
+		return ctxTraceID
+	}
+
+	return xid.New()
+}
+
+func (self Observer) TraceSpan(ctx context.Context, name ...string) (context.Context, func()) {
+	traceID := self.GetTrace(ctx)
+	ctx = self.SetTrace(ctx, traceID)
+
+	pc, _, _, _ := runtime.Caller(1)
+	caller := runtime.FuncForPC(pc).Name()
+	spanName := caller
+	if len(name) > 0 { // nolint
+		spanName = name[0]
+	}
+
+	var sentrySpan *sentry.Span
+	if self.config.SentryConfig != nil { // nolint
+		sentryHub := sentry.GetHubFromContext(ctx)
+		if sentryHub == nil {
+			sentryHub = sentry.CurrentHub().Clone()
+		}
+
+		sentryHub.Scope().SetTag(_OBSERVER_SENTRY_TRACE_ID_TAG, traceID.String())
+		if sentryHub.Scope().Transaction() == "" { // nolint
+			sentryHub.Scope().SetTransaction(caller)
+		}
+
+		ctx = sentry.SetHubOnContext(ctx, sentryHub)
+
+		sentrySpan = sentry.StartSpan(ctx, spanName)
+		ctx = sentrySpan.Context()
+	}
+
+	return ctx, func() {
+		if self.config.SentryConfig != nil {
+			sentrySpan.Finish()
+		}
+	}
 }
 
 func (self Observer) TraceRequest(ctx context.Context, request *http.Request) (context.Context, func()) {
-	var endGilkRequest func()
+	traceID := self.GetTrace(ctx)
+	traceIDRaw := request.Header.Get(_OBSERVER_REQUEST_TRACE_ID_HEADER)
+	if traceIDRaw != "" { // nolint
+		traceID, _ = xid.FromString(traceIDRaw) // nolint
+	}
+	ctx = self.SetTrace(ctx, traceID)
 
-	if self.config.GilkConfig != nil {
-		ctx, endGilkRequest = gilk.NewContext(ctx, request.URL.Path, request.Method)
+	spanName := request.RequestURI
+
+	var endGilkRequest func()
+	if self.config.GilkConfig != nil { // nolint
+		ctx, endGilkRequest = gilk.NewContext(ctx, request.RequestURI, request.Method)
+	}
+
+	var sentrySpan *sentry.Span
+	if self.config.SentryConfig != nil { // nolint
+		sentryHub := sentry.GetHubFromContext(ctx)
+		if sentryHub == nil {
+			sentryHub = sentry.CurrentHub().Clone()
+		}
+
+		sentryHub.Scope().SetRequest(request)
+		sentryHub.Scope().SetUser(sentry.User{
+			IPAddress: request.RemoteAddr,
+		})
+		sentryHub.Scope().SetTag(_OBSERVER_SENTRY_TRACE_ID_TAG, traceID.String())
+		if sentryHub.Scope().Transaction() == "" { // nolint
+			sentryHub.Scope().SetTransaction(spanName)
+		}
+
+		ctx = sentry.SetHubOnContext(ctx, sentryHub)
+
+		sentrySpan = sentry.StartSpan(ctx, spanName, sentry.ContinueFromRequest(request))
+		ctx = sentrySpan.Context()
 	}
 
 	return ctx, func() {
 		if self.config.GilkConfig != nil {
 			endGilkRequest()
 		}
+
+		if self.config.SentryConfig != nil {
+			sentrySpan.Finish()
+		}
 	}
 }
 
 func (self Observer) TraceQuery(ctx context.Context, sql string, args ...interface{}) (context.Context, func()) {
-	var endGilkQuery func()
+	traceID := self.GetTrace(ctx)
+	ctx = self.SetTrace(ctx, traceID)
 
-	if self.config.GilkConfig != nil {
+	// Skip 2 dataframes when using observer in database wrapper, otherwise 1
+	pc, _, _, _ := runtime.Caller(2)
+	caller := runtime.FuncForPC(pc).Name()
+	spanName := caller
+
+	var endGilkQuery func()
+	if self.config.GilkConfig != nil { // nolint
 		dArgs := make([]interface{}, len(args))
 
 		copy(dArgs, args)
@@ -269,9 +366,31 @@ func (self Observer) TraceQuery(ctx context.Context, sql string, args ...interfa
 		ctx, endGilkQuery = gilk.NewQuery(ctx, sql, dArgs...)
 	}
 
+	var sentrySpan *sentry.Span
+	if self.config.SentryConfig != nil { // nolint
+		sentryHub := sentry.GetHubFromContext(ctx)
+		if sentryHub == nil {
+			sentryHub = sentry.CurrentHub().Clone()
+		}
+
+		sentryHub.Scope().SetTag(_OBSERVER_SENTRY_TRACE_ID_TAG, traceID.String())
+		if sentryHub.Scope().Transaction() == "" { // nolint
+			sentryHub.Scope().SetTransaction(caller)
+		}
+
+		ctx = sentry.SetHubOnContext(ctx, sentryHub)
+
+		sentrySpan = sentry.StartSpan(ctx, spanName)
+		ctx = sentrySpan.Context()
+	}
+
 	return ctx, func() {
 		if self.config.GilkConfig != nil {
 			endGilkQuery()
+		}
+
+		if self.config.SentryConfig != nil {
+			sentrySpan.Finish()
 		}
 	}
 }

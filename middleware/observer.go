@@ -9,7 +9,10 @@ import (
 )
 
 // TODO: dump request/response body, params and headers for easy debug tracing in logs
-// TODO: set request to sentry scope
+
+var (
+	_OBSERVER_MIDDLEWARE_RESPONSE_TRACE_ID_HEADER = "X-Trace-Id"
+)
 
 type ObserverConfig struct {
 }
@@ -33,7 +36,9 @@ func (self *Observer) Handle(next echo.HandlerFunc) echo.HandlerFunc {
 
 		traceCtx, endTraceRequest := self.observer.TraceRequest(ctx.Request().Context(), ctx.Request())
 		defer endTraceRequest()
+		traceID := self.observer.GetTrace(traceCtx).String()
 
+		ctx.Response().Header().Set(_OBSERVER_MIDDLEWARE_RESPONSE_TRACE_ID_HEADER, traceID)
 		ctx.SetRequest(ctx.Request().WithContext(traceCtx))
 
 		request := ctx.Request()
@@ -49,8 +54,9 @@ func (self *Observer) Handle(next echo.HandlerFunc) echo.HandlerFunc {
 			Str("method", request.Method).
 			Str("path", request.RequestURI).
 			Int("status", response.Status).
-			Str("ip_address", ctx.RealIP()).
+			Str("ip_address", request.RemoteAddr).
 			Dur("latency", stop.Sub(start)).
+			Str("trace_id", traceID).
 			Msg("")
 
 		return nil

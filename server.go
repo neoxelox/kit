@@ -88,7 +88,7 @@ func NewServer(observer Observer, serializer Serializer, binder Binder,
 	server.Renderer = &renderer
 	// server.Validator = nil // Validator should always be at domain level
 	server.HTTPErrorHandler = exceptionHandler.Handle
-	server.IPExtractor = echo.ExtractIPFromRealIPHeader()
+	server.IPExtractor = echo.ExtractIPFromRealIPHeader() // TODO: maybe allow to modify this?
 
 	// TODO: move this to a middleware in order to be able to log giant requests?
 	server.Pre(echoMiddleware.BodyLimitWithConfig(echoMiddleware.BodyLimitConfig{
@@ -101,6 +101,14 @@ func NewServer(observer Observer, serializer Serializer, binder Binder,
 	server.Pre(echoMiddleware.BodyLimitWithConfig(echoMiddleware.BodyLimitConfig{
 		Limit: Utils.ByteSize(*config.RequestFileMaxSize),
 	}))
+
+	// Pre hook middleware
+	server.Pre(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(ctx echo.Context) error {
+			ctx.Request().RemoteAddr = ctx.RealIP()
+			return next(ctx)
+		}
+	})
 
 	return &Server{
 		config:   config,

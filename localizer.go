@@ -15,8 +15,6 @@ import (
 
 // TODO: enhance localization with go-i18n, go-localize or spreak
 
-const _LOCALIZER_LOCALE_CTX_KEY = _BASE_CTX_KEY + "localizer:locale"
-
 var (
 	_LOCALIZER_DEFAULT_LOCALES_PATH      = "./locales"
 	_LOCALIZER_DEFAULT_LOCALE_EXTENSIONS = regexp.MustCompile(`^.*\.(yml|yaml)$`)
@@ -127,11 +125,11 @@ func (self *Localizer) Refresh() error {
 }
 
 func (self Localizer) SetLocale(ctx context.Context, locale language.Tag) context.Context {
-	return context.WithValue(ctx, _LOCALIZER_LOCALE_CTX_KEY, locale)
+	return context.WithValue(ctx, KeyLocalizerLocale, locale)
 }
 
 func (self Localizer) GetLocale(ctx context.Context) language.Tag {
-	if ctxLocale, ok := ctx.Value(_LOCALIZER_LOCALE_CTX_KEY).(language.Tag); ok {
+	if ctxLocale, ok := ctx.Value(KeyLocalizerLocale).(language.Tag); ok {
 		return ctxLocale
 	}
 

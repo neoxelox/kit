@@ -36,6 +36,8 @@ func (self *ExceptionHandler) Handle(err error, ctx echo.Context) {
 		switch err {
 		case echo.ErrNotFound:
 			exc = ExcNotFound().Cause(err)
+		case echo.ErrMethodNotAllowed:
+			exc = ExcInvalidRequest().Cause(err)
 		case echo.ErrStatusRequestEntityTooLarge:
 			exc = ExcInvalidRequest().Cause(err)
 		case http.ErrHandlerTimeout:
