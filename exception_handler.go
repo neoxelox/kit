@@ -23,7 +23,7 @@ func NewExceptionHandler(observer Observer, config ExceptionHandlerConfig) *Exce
 }
 
 func (self *ExceptionHandler) Handle(err error, ctx echo.Context) {
-	// If request was already committed it means another middleware or an actual view
+	// If response was already committed it means another middleware or an actual view
 	// has already called the exception handler or written an appropriate response.
 	if ctx.Response().Committed {
 		return
@@ -48,7 +48,7 @@ func (self *ExceptionHandler) Handle(err error, ctx echo.Context) {
 	}
 
 	if exc.status >= http.StatusInternalServerError {
-		self.observer.Error(exc)
+		self.observer.Error(ctx.Request().Context(), exc)
 	}
 
 	if ctx.Request().Method == http.MethodHead {
@@ -62,6 +62,7 @@ func (self *ExceptionHandler) Handle(err error, ctx echo.Context) {
 	}
 
 	if err != nil {
-		self.observer.Error(ErrExceptionHandlerGeneric().Withf("cannot return exception %s", exc).Wrap(err))
+		self.observer.Error(
+			ctx.Request().Context(), ErrExceptionHandlerGeneric().Withf("cannot return exception %s", exc).Wrap(err))
 	}
 }

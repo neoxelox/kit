@@ -135,7 +135,7 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig) 
 			nil, func(attempt int) error {
 				var err error // nolint
 
-				observer.Infof("Trying to connect to the %s database %d/%d",
+				observer.Infof(ctx, "Trying to connect to the %s database %d/%d",
 					config.DatabaseName, attempt, config.RetryConfig.Attempts)
 
 				pool, err = pgxpool.ConnectConfig(ctx, poolConfig)
@@ -159,7 +159,7 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig) 
 		return nil, ErrDatabaseGeneric().Wrap(err)
 	}
 
-	observer.Infof("Connected to the %s database", config.DatabaseName)
+	observer.Infof(ctx, "Connected to the %s database", config.DatabaseName)
 
 	sqlf.SetDialect(sqlf.PostgreSQL)
 
@@ -348,11 +348,11 @@ func (self *Database) Transaction(ctx context.Context, fn func(ctx context.Conte
 
 func (self *Database) Close(ctx context.Context) error {
 	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
-		self.observer.Infof("Closing %s database", self.config.DatabaseName)
+		self.observer.Infof(ctx, "Closing %s database", self.config.DatabaseName)
 
 		self.pool.Close()
 
-		self.observer.Infof("Closed %s database", self.config.DatabaseName)
+		self.observer.Infof(ctx, "Closed %s database", self.config.DatabaseName)
 
 		return nil
 	})
@@ -386,5 +386,5 @@ func _newPgxLogger(observer *Observer) *_pgxLogger {
 }
 
 func (self _pgxLogger) Log(ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{}) { // nolint
-	self.observer.WithLevelf(_PlevelToKlevel[level], "%s: %+v", msg, data)
+	self.observer.WithLevelf(ctx, _PlevelToKlevel[level], "%s: %+v", msg, data)
 }

@@ -15,7 +15,7 @@ import (
 
 // TODO: fix caller func name ".func1"?
 // TODO: fix unnamed Sentry spans
-// TODO: fix path params in transaction names
+// TODO: fix path params in transaction names (see observer middleware patch)
 // TODO: add NewRelic for APM and events
 // TODO: add OpenTelemetry for tracing instead of Sentry/NewRelic?
 
@@ -91,7 +91,7 @@ func NewObserver(ctx context.Context, config ObserverConfig) (*Observer, error) 
 						Debug:            false,
 						AttachStacktrace: false, // Already done by errors package
 						SampleRate:       1.0,   // Error events
-						TracesSampleRate: 0.25,  // Transaction events
+						TracesSampleRate: 0.2,   // Transaction events
 					})
 					if err != nil {
 						return ErrObserverGeneric().WrapAs(err)
@@ -133,17 +133,71 @@ func NewObserver(ctx context.Context, config ObserverConfig) (*Observer, error) 
 	}, nil
 }
 
-func (self Observer) Warn(i ...interface{}) {
-	// Observer must wrap Warn because of skip frame count on caller
+func (self Observer) Print(ctx context.Context, i ...interface{}) { // nolint
+	if !(LvlTrace >= self.config.Level) {
+		return
+	}
+
+	self.Logger.Print(i...)
+}
+
+func (self Observer) Printf(ctx context.Context, format string, i ...interface{}) { // nolint
+	if !(LvlTrace >= self.config.Level) {
+		return
+	}
+
+	self.Logger.Printf(format, i...)
+}
+
+func (self Observer) Debug(ctx context.Context, i ...interface{}) { // nolint
+	if !(LvlDebug >= self.config.Level) {
+		return
+	}
+
+	self.Logger.Debug(i...)
+}
+
+func (self Observer) Debugf(ctx context.Context, format string, i ...interface{}) { // nolint
+	if !(LvlDebug >= self.config.Level) {
+		return
+	}
+
+	self.Logger.Debugf(format, i...)
+}
+
+func (self Observer) Info(ctx context.Context, i ...interface{}) { // nolint
+	if !(LvlInfo >= self.config.Level) {
+		return
+	}
+
+	self.Logger.Info(i...)
+}
+
+func (self Observer) Infof(ctx context.Context, format string, i ...interface{}) { // nolint
+	if !(LvlInfo >= self.config.Level) {
+		return
+	}
+
+	self.Logger.Infof(format, i...)
+}
+
+func (self Observer) Warn(ctx context.Context, i ...interface{}) { // nolint
+	if !(LvlWarn >= self.config.Level) {
+		return
+	}
+
 	self.Logger.Warn(i...)
 }
 
-func (self Observer) Warnf(format string, i ...interface{}) {
-	// Observer must wrap Warnf because of skip frame count on caller
+func (self Observer) Warnf(ctx context.Context, format string, i ...interface{}) { // nolint
+	if !(LvlWarn >= self.config.Level) {
+		return
+	}
+
 	self.Logger.Warnf(format, i...)
 }
 
-func (self Observer) sendErrToSentry(i ...interface{}) {
+func (self Observer) sendErrToSentry(ctx context.Context, i ...interface{}) {
 	if len(i) == 0 {
 		return
 	}
@@ -172,11 +226,15 @@ func (self Observer) sendErrToSentry(i ...interface{}) {
 
 	// TODO: enhance exception message and title
 
-	// sentryHub.CaptureEvent() // TODO: important use the hub from context!
-	sentry.CaptureEvent(sentryEvent)
+	sentryHub := sentry.GetHubFromContext(ctx)
+	if sentryHub == nil {
+		sentryHub = sentry.CurrentHub().Clone()
+	}
+
+	sentryHub.CaptureEvent(sentryEvent)
 }
 
-func (self Observer) Error(i ...interface{}) {
+func (self Observer) Error(ctx context.Context, i ...interface{}) {
 	if !(LvlError >= self.config.Level) {
 		return
 	}
@@ -184,11 +242,11 @@ func (self Observer) Error(i ...interface{}) {
 	self.Logger.Error(i...)
 
 	if self.config.SentryConfig != nil {
-		self.sendErrToSentry(i...)
+		self.sendErrToSentry(ctx, i...)
 	}
 }
 
-func (self Observer) Errorf(format string, i ...interface{}) {
+func (self Observer) Errorf(ctx context.Context, format string, i ...interface{}) {
 	if !(LvlError >= self.config.Level) {
 		return
 	}
@@ -196,11 +254,11 @@ func (self Observer) Errorf(format string, i ...interface{}) {
 	self.Logger.Errorf(format, i...)
 
 	if self.config.SentryConfig != nil {
-		self.sendErrToSentry(fmt.Sprintf(format, i...))
+		self.sendErrToSentry(ctx, fmt.Sprintf(format, i...))
 	}
 }
 
-func (self Observer) Fatal(i ...interface{}) {
+func (self Observer) Fatal(ctx context.Context, i ...interface{}) {
 	if !(LvlError >= self.config.Level) {
 		return
 	}
@@ -208,11 +266,11 @@ func (self Observer) Fatal(i ...interface{}) {
 	self.Logger.Fatal(i...)
 
 	if self.config.SentryConfig != nil {
-		self.sendErrToSentry(i...)
+		self.sendErrToSentry(ctx, i...)
 	}
 }
 
-func (self Observer) Fatalf(format string, i ...interface{}) {
+func (self Observer) Fatalf(ctx context.Context, format string, i ...interface{}) {
 	if !(LvlError >= self.config.Level) {
 		return
 	}
@@ -220,11 +278,11 @@ func (self Observer) Fatalf(format string, i ...interface{}) {
 	self.Logger.Fatalf(format, i...)
 
 	if self.config.SentryConfig != nil {
-		self.sendErrToSentry(fmt.Sprintf(format, i...))
+		self.sendErrToSentry(ctx, fmt.Sprintf(format, i...))
 	}
 }
 
-func (self Observer) Panic(i ...interface{}) {
+func (self Observer) Panic(ctx context.Context, i ...interface{}) {
 	if !(LvlError >= self.config.Level) {
 		return
 	}
@@ -232,11 +290,11 @@ func (self Observer) Panic(i ...interface{}) {
 	self.Logger.Panic(i...)
 
 	if self.config.SentryConfig != nil {
-		self.sendErrToSentry(i...)
+		self.sendErrToSentry(ctx, i...)
 	}
 }
 
-func (self Observer) Panicf(format string, i ...interface{}) {
+func (self Observer) Panicf(ctx context.Context, format string, i ...interface{}) {
 	if !(LvlError >= self.config.Level) {
 		return
 	}
@@ -244,7 +302,37 @@ func (self Observer) Panicf(format string, i ...interface{}) {
 	self.Logger.Panicf(format, i...)
 
 	if self.config.SentryConfig != nil {
-		self.sendErrToSentry(fmt.Sprintf(format, i...))
+		self.sendErrToSentry(ctx, fmt.Sprintf(format, i...))
+	}
+}
+
+func (self Observer) WithLevel(ctx context.Context, level _level, i ...interface{}) {
+	switch level {
+	case LvlTrace:
+		self.Print(ctx, i...)
+	case LvlDebug:
+		self.Debug(ctx, i...)
+	case LvlInfo:
+		self.Info(ctx, i...)
+	case LvlWarn:
+		self.Warn(ctx, i...)
+	case LvlError:
+		self.Error(ctx, i...)
+	}
+}
+
+func (self Observer) WithLevelf(ctx context.Context, level _level, format string, i ...interface{}) {
+	switch level {
+	case LvlTrace:
+		self.Printf(ctx, format, i...)
+	case LvlDebug:
+		self.Debugf(ctx, format, i...)
+	case LvlInfo:
+		self.Infof(ctx, format, i...)
+	case LvlWarn:
+		self.Warnf(ctx, format, i...)
+	case LvlError:
+		self.Errorf(ctx, format, i...)
 	}
 }
 

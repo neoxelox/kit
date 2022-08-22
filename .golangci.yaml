@@ -246,7 +246,7 @@ linters-settings:
           - maxLitCount: "3"
             allowStrs: '"",":",": "'
             allowInts: "0,1,2,3"
-            allowFloats: "0.0,0.25,0.5,1.0,2.0,3.0"
+            allowFloats: "0.0,0.1,0.2,0.25,0.5,1.0,2.0,3.0"
       - name: unused-receiver
         disabled: true
       - name: unhandled-error

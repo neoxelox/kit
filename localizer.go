@@ -99,7 +99,7 @@ func _getCopies(
 	locales := len(copiesByLang)
 
 	if locales < 1 {
-		observer.Info("No locales loaded")
+		observer.Info(context.Background(), "No locales loaded")
 		return &copiesByLang, nil
 	}
 
@@ -108,7 +108,7 @@ func _getCopies(
 		langs = append(langs, k.String())
 	}
 
-	observer.Infof("Loaded %d locales: %v", locales, strings.Join(langs, ", "))
+	observer.Infof(context.Background(), "Loaded %d locales: %v", locales, strings.Join(langs, ", "))
 
 	return &copiesByLang, nil
 }

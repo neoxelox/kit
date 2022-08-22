@@ -3,6 +3,7 @@ package middleware
 import (
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/labstack/echo/v4"
 
 	"github.com/neoxelox/kit"
@@ -41,11 +42,19 @@ func (self *Observer) Handle(next echo.HandlerFunc) echo.HandlerFunc {
 		ctx.Response().Header().Set(_OBSERVER_MIDDLEWARE_RESPONSE_TRACE_ID_HEADER, traceID)
 		ctx.SetRequest(ctx.Request().WithContext(traceCtx))
 
-		request := ctx.Request()
-
 		next(ctx) // nolint
 
+		request := ctx.Request()
 		response := ctx.Response()
+
+		// TODO: find another cleaner way to do this
+		// Patch in order to be able to have better path info in sentry
+		// now that the router has been executed
+		sentryHub := sentry.GetHubFromContext(request.Context())
+		if sentryHub != nil {
+			sentryHub.Scope().SetTransaction(ctx.Path())
+		}
+		// -----
 
 		stop := time.Now()
 

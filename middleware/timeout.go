@@ -187,7 +187,7 @@ func (self *Timeout) handlePanickedAfterTimeout(ctx *_timeoutHandlerCtx, rec int
 		err = kit.ErrServerTimedOut().Withf("after executing %s %s", ctx.handlerCtx.Request().Method,
 			ctx.handlerCtx.Request().RequestURI).Wrap(err)
 
-		self.observer.Error(err)
+		self.observer.Error(ctx.handlerCtx.Request().Context(), err)
 	}
 }
 
@@ -199,7 +199,8 @@ func (self *Timeout) handleFinishedAfterTimeout(ctx *_timeoutHandlerCtx) {
 		err := kit.ErrServerTimedOut().Withf("after executing %s %s", ctx.handlerCtx.Request().Method,
 			ctx.handlerCtx.Request().RequestURI).Wrap(ctx.handlerError)
 
-		self.observer.Error(err)
+		// TODO: maybe not log it as an error because we already log the TIMEOUT one?
+		self.observer.Error(ctx.handlerCtx.Request().Context(), err)
 	}
 }
 

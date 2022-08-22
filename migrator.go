@@ -81,7 +81,7 @@ func NewMigrator(ctx context.Context, observer Observer, config MigratorConfig) 
 			nil, func(attempt int) error {
 				var err error
 
-				observer.Infof("Trying to connect to the %s database %d/%d",
+				observer.Infof(ctx, "Trying to connect to the %s database %d/%d",
 					config.DatabaseName, attempt, config.RetryConfig.Attempts)
 
 				migrator, err = migrate.New(*config.MigrationsPath, dsn)
@@ -100,7 +100,7 @@ func NewMigrator(ctx context.Context, observer Observer, config MigratorConfig) 
 		return nil, ErrMigratorGeneric().Wrap(err)
 	}
 
-	observer.Infof("Connected to the %s database", config.DatabaseName)
+	observer.Infof(ctx, "Connected to the %s database", config.DatabaseName)
 
 	migrator.Log = _newMigrateLogger(&observer)
 
@@ -142,7 +142,7 @@ func (self *Migrator) Assert(ctx context.Context, schemaVersion int) error {
 					schemaVersion, currentSchemaVersion)
 			}
 
-			self.observer.Infof("Desired schema version %d asserted", schemaVersion)
+			self.observer.Infof(ctx, "Desired schema version %d asserted", schemaVersion)
 
 			return nil
 		}()
@@ -188,7 +188,7 @@ func (self *Migrator) Apply(ctx context.Context, schemaVersion int) error {
 			}
 
 			if currentSchemaVersion == uint(schemaVersion) {
-				self.observer.Info("No migrations to apply")
+				self.observer.Info(ctx, "No migrations to apply")
 				return nil
 			}
 
@@ -197,14 +197,14 @@ func (self *Migrator) Apply(ctx context.Context, schemaVersion int) error {
 					schemaVersion, currentSchemaVersion)
 			}
 
-			self.observer.Infof("%d migrations to be applied", schemaVersion-int(currentSchemaVersion))
+			self.observer.Infof(ctx, "%d migrations to be applied", schemaVersion-int(currentSchemaVersion))
 
 			err = self.migrator.Migrate(uint(schemaVersion))
 			if err != nil {
 				return ErrMigratorGeneric().WrapAs(err)
 			}
 
-			self.observer.Info("Applied all migrations successfully")
+			self.observer.Info(ctx, "Applied all migrations successfully")
 
 			return nil
 		}()
@@ -246,7 +246,7 @@ func (self *Migrator) Rollback(ctx context.Context, schemaVersion int) error {
 			}
 
 			if bad {
-				self.observer.Infof("Current schema version %d is dirty, ignoring", currentSchemaVersion)
+				self.observer.Infof(ctx, "Current schema version %d is dirty, ignoring", currentSchemaVersion)
 
 				err = self.migrator.Force(int(currentSchemaVersion))
 				if err != nil {
@@ -255,7 +255,7 @@ func (self *Migrator) Rollback(ctx context.Context, schemaVersion int) error {
 			}
 
 			if currentSchemaVersion == uint(schemaVersion) {
-				self.observer.Info("No migrations to rollback")
+				self.observer.Info(ctx, "No migrations to rollback")
 				return nil
 			}
 
@@ -264,14 +264,14 @@ func (self *Migrator) Rollback(ctx context.Context, schemaVersion int) error {
 					schemaVersion, currentSchemaVersion)
 			}
 
-			self.observer.Infof("%d migrations to be rollbacked", int(currentSchemaVersion)-schemaVersion)
+			self.observer.Infof(ctx, "%d migrations to be rollbacked", int(currentSchemaVersion)-schemaVersion)
 
 			err = self.migrator.Migrate(uint(schemaVersion))
 			if err != nil {
 				return ErrMigratorGeneric().WrapAs(err)
 			}
 
-			self.observer.Info("Rollbacked all migrations successfully")
+			self.observer.Info(ctx, "Rollbacked all migrations successfully")
 
 			return nil
 		}()
@@ -299,7 +299,7 @@ func (self *Migrator) Rollback(ctx context.Context, schemaVersion int) error {
 
 func (self *Migrator) Close(ctx context.Context) error {
 	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
-		self.observer.Info("Closing migrator")
+		self.observer.Info(ctx, "Closing migrator")
 
 		select {
 		case self.migrator.GracefulStop <- true:
@@ -318,7 +318,7 @@ func (self *Migrator) Close(ctx context.Context) error {
 			return ErrMigratorGeneric().WrapAs(err)
 		}
 
-		self.observer.Info("Closed migrator")
+		self.observer.Info(ctx, "Closed migrator")
 
 		return nil
 	})
@@ -343,7 +343,7 @@ func _newMigrateLogger(observer *Observer) *_migrateLogger {
 }
 
 func (self _migrateLogger) Printf(format string, v ...interface{}) {
-	self.observer.Infof(strings.TrimSpace(format), v...)
+	self.observer.Infof(context.Background(), strings.TrimSpace(format), v...)
 }
 
 func (self _migrateLogger) Verbose() bool {

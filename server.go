@@ -118,7 +118,7 @@ func NewServer(observer Observer, serializer Serializer, binder Binder,
 }
 
 func (self *Server) Run() error {
-	self.observer.Infof("Server started at port %d", self.config.AppPort)
+	self.observer.Infof(context.Background(), "Server started at port %d", self.config.AppPort)
 
 	err := self.server.Start(fmt.Sprintf(":%d", self.config.AppPort))
 	if err != nil && err != http.ErrServerClosed {
@@ -138,7 +138,7 @@ func (self *Server) Host(host string, middleware ...echo.MiddlewareFunc) *echo.G
 
 func (self *Server) Close(ctx context.Context) error {
 	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
-		self.observer.Info("Closing server")
+		self.observer.Info(ctx, "Closing server")
 
 		self.server.Server.SetKeepAlivesEnabled(false)
 
@@ -147,7 +147,7 @@ func (self *Server) Close(ctx context.Context) error {
 			return ErrServerGeneric().WrapAs(err)
 		}
 
-		self.observer.Info("Closed server")
+		self.observer.Info(ctx, "Closed server")
 
 		return nil
 	})

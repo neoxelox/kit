@@ -125,7 +125,7 @@ func NewCache(ctx context.Context, observer Observer, config CacheConfig) (*Cach
 			nil, func(attempt int) error {
 				var err error // nolint
 
-				observer.Infof("Trying to connect to the cache %d/%d", attempt, config.RetryConfig.Attempts)
+				observer.Infof(ctx, "Trying to connect to the cache %d/%d", attempt, config.RetryConfig.Attempts)
 
 				pool = redis.NewClient(poolConfig)
 
@@ -145,7 +145,7 @@ func NewCache(ctx context.Context, observer Observer, config CacheConfig) (*Cach
 		return nil, ErrCacheGeneric().Wrap(err)
 	}
 
-	observer.Info("Connected to the cache")
+	observer.Info(ctx, "Connected to the cache")
 
 	cache := cache.New(&cache.Options{
 		Redis:        pool,
@@ -243,14 +243,14 @@ func (self *Cache) Delete(ctx context.Context, key string) error {
 
 func (self *Cache) Close(ctx context.Context) error {
 	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
-		self.observer.Info("Closing cache")
+		self.observer.Info(ctx, "Closing cache")
 
 		err := self.pool.Close()
 		if err != nil {
 			return ErrCacheGeneric().WrapAs(err)
 		}
 
-		self.observer.Info("Closed cache")
+		self.observer.Info(ctx, "Closed cache")
 
 		return nil
 	})
@@ -275,5 +275,5 @@ func _newRedisLogger(observer *Observer) *_redisLogger {
 }
 
 func (self _redisLogger) Printf(ctx context.Context, format string, v ...interface{}) { // nolint
-	self.observer.Infof(format, v...)
+	self.observer.Infof(ctx, format, v...)
 }
