@@ -6,6 +6,9 @@ import (
 	"github.com/neoxelox/kit"
 )
 
+// TODO: See how to improve this, as ctx.Error() should be called right after the actual handler
+// (so in theory the ExceptionMiddleware should be the first middleware after the handler)
+
 type ExceptionConfig struct {
 }
 
@@ -26,17 +29,10 @@ func (self *Exception) Handle(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
 		err := next(ctx)
 		if err != nil {
-			// If response was already committed it means another middleware or an actual view
-			// has already called the exception handler or written an appropriate response,
-			// but we should send the error upwards to cover the case the handler timed out.
-			if ctx.Response().Committed {
-				return err
-			}
-
 			// Handle, serialize and write exception response
 			ctx.Error(err)
 		}
 
-		return nil
+		return err
 	}
 }

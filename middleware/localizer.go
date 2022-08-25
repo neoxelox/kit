@@ -8,6 +8,10 @@ import (
 	"github.com/neoxelox/kit"
 )
 
+const (
+	_LOCALIZER_MIDDLEWARE_REQUEST_ACCEPT_LANGUAGE_HEADER = "Accept-Language"
+)
+
 type LocalizerConfig struct {
 }
 
@@ -30,13 +34,13 @@ func (self *Localizer) Handle(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
 		request := ctx.Request()
 
-		locales, _, err := language.ParseAcceptLanguage(request.Header.Get("Accept-Language"))
-		if err != nil { // nolint
+		locales, _, err := language.ParseAcceptLanguage(
+			request.Header.Get(_LOCALIZER_MIDDLEWARE_REQUEST_ACCEPT_LANGUAGE_HEADER))
+		if err != nil {
 			self.observer.Error(request.Context(), kit.ErrLocalizerGeneric().Wrap(err))
-		} else if len(locales) < 1 {
-			self.observer.Error(
-				request.Context(), kit.ErrLocalizerGeneric().With("no locales found in Accept-Language header"))
-		} else {
+		}
+
+		if len(locales) > 0 {
 			ctx.SetRequest(request.WithContext(self.localizer.SetLocale(request.Context(), locales[0])))
 		}
 

@@ -33,6 +33,10 @@ var (
 	KeyTraceID             _key = KeyBase + "trace:id"
 )
 
+func Key(key string) _key {
+	return _key(key)
+}
+
 type _environment string
 
 // Builtin environments.
@@ -40,6 +44,10 @@ var (
 	EnvDevelopment _environment = "dev"
 	EnvProduction  _environment = "prod"
 )
+
+func Env(env string) _environment {
+	return _environment(env)
+}
 
 type _level int
 
@@ -52,6 +60,10 @@ var (
 	LvlError _level = -1
 	LvlNone  _level
 )
+
+func Lvl(lvl int) _level {
+	return _level(lvl)
+}
 
 // Builtin errors.
 var (
