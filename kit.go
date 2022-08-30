@@ -16,7 +16,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/eapache/go-resiliency/deadline"
 	"github.com/eapache/go-resiliency/retrier"
-	"github.com/scylladb/go-set/strset"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cpy/cpy"
 )
 
 func ptr[T any](v T) *T {
@@ -105,10 +106,14 @@ const (
 	_UTILS_ASCII_LETTER_SET_SIZE = 62
 )
 
-type _utils struct{}
+type _utils struct {
+	copier *cpy.Copier
+}
 
 // Utils contains the builtin utils.
-var Utils = _utils{}
+var Utils = _utils{
+	copier: cpy.New(cpy.IgnoreAllUnexported(), cpy.Shallow(time.Time{}), cpy.Shallow(date.Date{})),
+}
 
 func (self _utils) ByteSize(size int) string {
 	if size < _UTILS_BYTE_BASE_SIZE {
@@ -181,25 +186,6 @@ func (self _utils) GetEnvAsSlice(key string, def []string) []string {
 	return def
 }
 
-func (self _utils) EqualStringSlice(first *[]string, second *[]string) bool {
-	if first == nil && second == nil {
-		return true
-	}
-
-	if !(first != nil && second != nil) {
-		return false
-	}
-
-	if len(*first) != len(*second) {
-		return false
-	}
-
-	setFirst := strset.New((*first)...)
-	setSecond := strset.New((*second)...)
-
-	return strset.SymmetricDifference(setFirst, setSecond).IsEmpty()
-}
-
 func (self _utils) Deadline(ctx context.Context, fn func(exceeded <-chan struct{}) error) error {
 	if ctxDeadline, ok := ctx.Deadline(); ok {
 		err := deadline.New(time.Until(ctxDeadline)).Run(fn)
@@ -255,246 +241,10 @@ func (self _utils) ExponentialRetry(
 		})
 }
 
-func (self _utils) CopyInt(src *int) *int {
-	if src == nil {
-		return nil
-	}
-
-	dst := *src
-
-	return &dst
+func (self _utils) Copy(src interface{}) interface{} {
+	return self.copier.Copy(src)
 }
 
-func (self _utils) CopyIntSlice(src *[]int) *[]int {
-	if src == nil {
-		return nil
-	}
-
-	dst := make([]int, len(*src))
-	copy(dst, *src)
-
-	return &dst
-}
-
-func (self _utils) CopyIntMap(src *map[string]int) *map[string]int {
-	if src == nil {
-		return nil
-	}
-
-	dst := make(map[string]int, len(*src))
-	for k, v := range *src {
-		dst[k] = v
-	}
-
-	return &dst
-}
-
-func (self _utils) CopyIntSliceMap(src *map[string][]int) *map[string][]int {
-	if src == nil {
-		return nil
-	}
-
-	dst := make(map[string][]int, len(*src))
-	for k, v := range *src {
-		dst[k] = *Utils.CopyIntSlice(&v) // nolint
-	}
-
-	return &dst
-}
-
-func (self _utils) CopyString(src *string) *string {
-	if src == nil {
-		return nil
-	}
-
-	dst := *src
-
-	return &dst
-}
-
-func (self _utils) CopyStringSlice(src *[]string) *[]string {
-	if src == nil {
-		return nil
-	}
-
-	dst := make([]string, len(*src))
-	copy(dst, *src)
-
-	return &dst
-}
-
-func (self _utils) CopyStringMap(src *map[string]string) *map[string]string {
-	if src == nil {
-		return nil
-	}
-
-	dst := make(map[string]string, len(*src))
-	for k, v := range *src {
-		dst[k] = v
-	}
-
-	return &dst
-}
-
-func (self _utils) CopyStringSliceMap(src *map[string][]string) *map[string][]string {
-	if src == nil {
-		return nil
-	}
-
-	dst := make(map[string][]string, len(*src))
-	for k, v := range *src {
-		dst[k] = *Utils.CopyStringSlice(&v) // nolint
-	}
-
-	return &dst
-}
-
-func (self _utils) CopyBool(src *bool) *bool {
-	if src == nil {
-		return nil
-	}
-
-	dst := *src
-
-	return &dst
-}
-
-func (self _utils) CopyBoolSlice(src *[]bool) *[]bool {
-	if src == nil {
-		return nil
-	}
-
-	dst := make([]bool, len(*src))
-	copy(dst, *src)
-
-	return &dst
-}
-
-func (self _utils) CopyBoolMap(src *map[string]bool) *map[string]bool {
-	if src == nil {
-		return nil
-	}
-
-	dst := make(map[string]bool, len(*src))
-	for k, v := range *src {
-		dst[k] = v
-	}
-
-	return &dst
-}
-
-func (self _utils) CopyBoolSliceMap(src *map[string][]bool) *map[string][]bool {
-	if src == nil {
-		return nil
-	}
-
-	dst := make(map[string][]bool, len(*src))
-	for k, v := range *src {
-		dst[k] = *Utils.CopyBoolSlice(&v) // nolint
-	}
-
-	return &dst
-}
-
-func (self _utils) CopyTime(src *time.Time) *time.Time {
-	if src == nil {
-		return nil
-	}
-
-	dstYear, dstMonth, dstDay := src.Date()
-	dstHour, dstMin, dstSec := src.Clock()
-	dstNsec := src.Nanosecond()
-	dstLocation := *src.Location()
-
-	dst := time.Date(dstYear, dstMonth, dstDay, dstHour, dstMin, dstSec, dstNsec, &dstLocation)
-
-	return &dst
-}
-
-func (self _utils) CopyTimeSlice(src *[]time.Time) *[]time.Time {
-	if src == nil {
-		return nil
-	}
-
-	dst := make([]time.Time, len(*src))
-	for i := 0; i < len(dst); i++ {
-		dst[i] = *Utils.CopyTime(&(*src)[i])
-	}
-
-	return &dst
-}
-
-func (self _utils) CopyTimeMap(src *map[string]time.Time) *map[string]time.Time {
-	if src == nil {
-		return nil
-	}
-
-	dst := make(map[string]time.Time, len(*src))
-	for k, v := range *src {
-		dst[k] = *Utils.CopyTime(&v) // nolint
-	}
-
-	return &dst
-}
-
-func (self _utils) CopyTimeSliceMap(src *map[string][]time.Time) *map[string][]time.Time {
-	if src == nil {
-		return nil
-	}
-
-	dst := make(map[string][]time.Time, len(*src))
-	for k, v := range *src {
-		dst[k] = *Utils.CopyTimeSlice(&v) // nolint
-	}
-
-	return &dst
-}
-
-func (self _utils) CopyDate(src *date.Date) *date.Date {
-	if src == nil {
-		return nil
-	}
-
-	dst := date.FromTime(src.Time)
-
-	return &dst
-}
-
-func (self _utils) CopyDateSlice(src *[]date.Date) *[]date.Date {
-	if src == nil {
-		return nil
-	}
-
-	dst := make([]date.Date, len(*src))
-	for i := 0; i < len(dst); i++ {
-		dst[i] = *Utils.CopyDate(&(*src)[i])
-	}
-
-	return &dst
-}
-
-func (self _utils) CopyDateMap(src *map[string]date.Date) *map[string]date.Date {
-	if src == nil {
-		return nil
-	}
-
-	dst := make(map[string]date.Date, len(*src))
-	for k, v := range *src {
-		dst[k] = *Utils.CopyDate(&v) // nolint
-	}
-
-	return &dst
-}
-
-func (self _utils) CopyDateSliceMap(src *map[string][]date.Date) *map[string][]date.Date {
-	if src == nil {
-		return nil
-	}
-
-	dst := make(map[string][]date.Date, len(*src))
-	for k, v := range *src {
-		dst[k] = *Utils.CopyDateSlice(&v) // nolint
-	}
-
-	return &dst
+func (self _utils) Equals(first interface{}, second interface{}) bool {
+	return cmp.Equal(first, second)
 }
