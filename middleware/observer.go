@@ -11,7 +11,7 @@ import (
 
 // TODO: dump request/response body, params and headers for easy debug tracing in logs
 
-var (
+const (
 	_OBSERVER_MIDDLEWARE_RESPONSE_TRACE_ID_HEADER = "X-Trace-Id"
 )
 
@@ -42,7 +42,7 @@ func (self *Observer) Handle(next echo.HandlerFunc) echo.HandlerFunc {
 		ctx.Response().Header().Set(_OBSERVER_MIDDLEWARE_RESPONSE_TRACE_ID_HEADER, traceID)
 		ctx.SetRequest(ctx.Request().WithContext(traceCtx))
 
-		next(ctx) // nolint
+		err := next(ctx)
 
 		request := ctx.Request()
 		response := ctx.Response()
@@ -68,6 +68,6 @@ func (self *Observer) Handle(next echo.HandlerFunc) echo.HandlerFunc {
 			Str("trace_id", traceID).
 			Msg("")
 
-		return nil
+		return err
 	}
 }
