@@ -117,8 +117,8 @@ func NewServer(observer Observer, serializer Serializer, binder Binder,
 	}
 }
 
-func (self *Server) Run() error {
-	self.observer.Infof(context.Background(), "Server started at port %d", self.config.AppPort)
+func (self *Server) Run(ctx context.Context) error {
+	self.observer.Infof(ctx, "Server started at port %d", self.config.AppPort)
 
 	err := self.server.Start(fmt.Sprintf(":%d", self.config.AppPort))
 	if err != nil && err != http.ErrServerClosed {

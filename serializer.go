@@ -1,6 +1,8 @@
 package kit
 
 import (
+	"encoding/json"
+
 	"github.com/labstack/echo/v4"
 )
 
@@ -10,21 +12,27 @@ type SerializerConfig struct {
 }
 
 type Serializer struct {
-	config     SerializerConfig
-	serializer *echo.DefaultJSONSerializer
-	observer   Observer
+	config   SerializerConfig
+	observer Observer
 }
 
 func NewSerializer(observer Observer, config SerializerConfig) *Serializer {
 	return &Serializer{
-		config:     config,
-		observer:   observer,
-		serializer: &echo.DefaultJSONSerializer{},
+		config:   config,
+		observer: observer,
 	}
 }
 
 func (self *Serializer) Serialize(c echo.Context, i interface{}, indent string) error {
-	err := self.serializer.Serialize(c, i, indent)
+	encoder := json.NewEncoder(c.Response())
+
+	if indent != "" {
+		encoder.SetIndent("", indent)
+	}
+
+	encoder.SetEscapeHTML(false)
+
+	err := encoder.Encode(i)
 	if err != nil {
 		return ErrSerializerGeneric().Wrap(err)
 	}
@@ -33,8 +41,19 @@ func (self *Serializer) Serialize(c echo.Context, i interface{}, indent string) 
 }
 
 func (self *Serializer) Deserialize(c echo.Context, i interface{}) error {
-	err := self.serializer.Deserialize(c, i)
+	decoder := json.NewDecoder(c.Request().Body)
+
+	err := decoder.Decode(i)
 	if err != nil {
+		if ute, ok := err.(*json.UnmarshalTypeError); ok {
+			return ErrSerializerGeneric().Withf("Unmarshal type error: expected=%v, got=%v, field=%v, offset=%v",
+				ute.Type, ute.Value, ute.Field, ute.Offset).Wrap(err)
+		}
+
+		if se, ok := err.(*json.SyntaxError); ok {
+			return ErrSerializerGeneric().Withf("Syntax error: offset=%v, error=%v", se.Offset, se.Error()).Wrap(err)
+		}
+
 		return ErrSerializerGeneric().Wrap(err)
 	}
 
