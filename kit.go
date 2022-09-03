@@ -39,6 +39,7 @@ type Environment string
 // Builtin environments.
 var (
 	EnvDevelopment Environment = "dev"
+	EnvIntegration Environment = "ci"
 	EnvProduction  Environment = "prod"
 )
 
