@@ -12,13 +12,14 @@ import (
 )
 
 var (
-	_SERVER_DEFAULT_REQUEST_HEADER_MAX_SIZE     = 1 << 10 // 1 KB
-	_SERVER_DEFAULT_REQUEST_BODY_MAX_SIZE       = 4 << 10 // 4 KB
-	_SERVER_DEFAULT_REQUEST_FILE_MAX_SIZE       = 2 << 20 // 2 MB
-	_SERVER_DEFAULT_REQUEST_KEEP_ALIVE_TIMEOUT  = 30 * time.Second
-	_SERVER_DEFAULT_REQUEST_READ_TIMEOUT        = 30 * time.Second
-	_SERVER_DEFAULT_REQUEST_READ_HEADER_TIMEOUT = 30 * time.Second
-	_SERVER_DEFAULT_RESPONSE_WRITE_TIMEOUT      = 30 * time.Second
+	_SERVER_DEFAULT_REQUEST_HEADER_MAX_SIZE                                = 1 << 10 // 1 KB
+	_SERVER_DEFAULT_REQUEST_BODY_MAX_SIZE                                  = 4 << 10 // 4 KB
+	_SERVER_DEFAULT_REQUEST_FILE_MAX_SIZE                                  = 2 << 20 // 2 MB
+	_SERVER_DEFAULT_REQUEST_KEEP_ALIVE_TIMEOUT                             = 30 * time.Second
+	_SERVER_DEFAULT_REQUEST_READ_TIMEOUT                                   = 30 * time.Second
+	_SERVER_DEFAULT_REQUEST_READ_HEADER_TIMEOUT                            = 30 * time.Second
+	_SERVER_DEFAULT_REQUEST_IP_EXTRACTOR        func(*http.Request) string = echo.ExtractIPFromRealIPHeader()
+	_SERVER_DEFAULT_RESPONSE_WRITE_TIMEOUT                                 = 30 * time.Second
 )
 
 type ServerConfig struct {
@@ -30,6 +31,7 @@ type ServerConfig struct {
 	RequestKeepAliveTimeout  *time.Duration
 	RequestReadTimeout       *time.Duration
 	RequestReadHeaderTimeout *time.Duration
+	RequestIPExtractor       *func(*http.Request) string
 	ResponseWriteTimeout     *time.Duration
 }
 
@@ -65,6 +67,10 @@ func NewServer(observer Observer, serializer Serializer, binder Binder,
 		config.RequestReadHeaderTimeout = ptr(_SERVER_DEFAULT_REQUEST_READ_HEADER_TIMEOUT)
 	}
 
+	if config.RequestIPExtractor == nil {
+		config.RequestIPExtractor = ptr(_SERVER_DEFAULT_REQUEST_IP_EXTRACTOR)
+	}
+
 	if config.ResponseWriteTimeout == nil {
 		config.ResponseWriteTimeout = ptr(_SERVER_DEFAULT_RESPONSE_WRITE_TIMEOUT)
 	}
@@ -88,7 +94,7 @@ func NewServer(observer Observer, serializer Serializer, binder Binder,
 	server.Renderer = &renderer
 	// server.Validator = nil // Validator should always be at domain level
 	server.HTTPErrorHandler = exceptionHandler.Handle
-	server.IPExtractor = echo.ExtractIPFromRealIPHeader() // TODO: maybe allow to modify this?
+	server.IPExtractor = *config.RequestIPExtractor
 
 	// TODO: move this to a middleware in order to be able to log giant requests?
 	server.Pre(echoMiddleware.BodyLimitWithConfig(echoMiddleware.BodyLimitConfig{
