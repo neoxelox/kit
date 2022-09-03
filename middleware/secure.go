@@ -46,7 +46,6 @@ type SecureConfig struct {
 }
 
 type Secure struct {
-	kit.Middleware
 	config           SecureConfig
 	observer         kit.Observer
 	corsMiddleware   echo.MiddlewareFunc

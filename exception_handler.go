@@ -7,7 +7,7 @@ import (
 )
 
 type ExceptionHandlerConfig struct {
-	Environment _environment
+	Environment Environment
 }
 
 type ExceptionHandler struct {

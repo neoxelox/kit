@@ -22,7 +22,7 @@ var (
 )
 
 type ServerConfig struct {
-	Environment              _environment
+	Environment              Environment
 	AppPort                  int
 	RequestHeaderMaxSize     *int
 	RequestBodyMaxSize       *int

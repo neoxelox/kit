@@ -19,7 +19,6 @@ type ObserverConfig struct {
 }
 
 type Observer struct {
-	kit.Middleware
 	config   ObserverConfig
 	observer kit.Observer
 }

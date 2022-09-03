@@ -25,7 +25,7 @@ const (
 	_LOGGER_FLUSH_DELAY              = _LOGGER_POLL_INTERVAL * 10
 )
 
-var _KlevelToZlevel = map[_level]zerolog.Level{
+var _KlevelToZlevel = map[Level]zerolog.Level{
 	LvlTrace: zerolog.TraceLevel,
 	LvlDebug: zerolog.DebugLevel,
 	LvlInfo:  zerolog.InfoLevel,
@@ -36,7 +36,7 @@ var _KlevelToZlevel = map[_level]zerolog.Level{
 
 type LoggerConfig struct {
 	AppName        string
-	Level          _level
+	Level          Level
 	SkipFrameCount *int
 }
 
@@ -46,7 +46,7 @@ type Logger struct {
 	out            io.Writer
 	prefix         string
 	header         string
-	level          _level
+	level          Level
 	verbose        bool
 	skipFrameCount int
 }
@@ -163,11 +163,11 @@ func (self *Logger) SetPrefix(p string) {
 	self.prefix = p
 }
 
-func (self Logger) Level() _level { // nolint
+func (self Logger) Level() Level { // nolint
 	return self.level
 }
 
-func (self *Logger) SetLevel(l _level) {
+func (self *Logger) SetLevel(l Level) {
 	*self.logger = self.logger.Level(_KlevelToZlevel[l])
 	self.level = l
 }
@@ -291,7 +291,7 @@ func (self Logger) Panicf(format string, i ...interface{}) {
 	}
 }
 
-func (self Logger) WithLevel(level _level, i ...interface{}) {
+func (self Logger) WithLevel(level Level, i ...interface{}) {
 	switch level {
 	case LvlTrace:
 		self.Print(i...)
@@ -306,7 +306,7 @@ func (self Logger) WithLevel(level _level, i ...interface{}) {
 	}
 }
 
-func (self Logger) WithLevelf(level _level, format string, i ...interface{}) {
+func (self Logger) WithLevelf(level Level, format string, i ...interface{}) {
 	switch level {
 	case LvlTrace:
 		self.Printf(format, i...)

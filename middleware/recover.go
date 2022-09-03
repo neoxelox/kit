@@ -15,7 +15,6 @@ type RecoverConfig struct {
 }
 
 type Recover struct {
-	kit.Middleware
 	config   RecoverConfig
 	observer kit.Observer
 }

@@ -22,7 +22,6 @@ type TimeoutConfig struct {
 }
 
 type Timeout struct {
-	kit.Middleware
 	config   TimeoutConfig
 	observer kit.Observer
 }

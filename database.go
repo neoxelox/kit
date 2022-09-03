@@ -32,7 +32,7 @@ var (
 	_DATABASE_ERR_PGCODE                  = regexp.MustCompile(`\(SQLSTATE (.*)\)`)
 )
 
-var _KlevelToPlevel = map[_level]pgx.LogLevel{
+var _KlevelToPlevel = map[Level]pgx.LogLevel{
 	LvlTrace: pgx.LogLevelTrace,
 	LvlDebug: pgx.LogLevelDebug,
 	LvlInfo:  pgx.LogLevelInfo,
@@ -366,7 +366,7 @@ func (self *Database) Close(ctx context.Context) error {
 	}
 }
 
-var _PlevelToKlevel = map[pgx.LogLevel]_level{
+var _PlevelToKlevel = map[pgx.LogLevel]Level{
 	pgx.LogLevelTrace: LvlTrace,
 	pgx.LogLevelDebug: LvlDebug,
 	pgx.LogLevelInfo:  LvlInfo,

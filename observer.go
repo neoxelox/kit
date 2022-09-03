@@ -46,10 +46,10 @@ type ObserverGilkConfig struct {
 }
 
 type ObserverConfig struct {
-	Environment  _environment
+	Environment  Environment
 	Release      string
 	AppName      string
-	Level        _level
+	Level        Level
 	SentryConfig *ObserverSentryConfig
 	GilkConfig   *ObserverGilkConfig
 	RetryConfig  *ObserverRetryConfig
@@ -306,7 +306,7 @@ func (self Observer) Panicf(ctx context.Context, format string, i ...interface{}
 	}
 }
 
-func (self Observer) WithLevel(ctx context.Context, level _level, i ...interface{}) {
+func (self Observer) WithLevel(ctx context.Context, level Level, i ...interface{}) {
 	switch level {
 	case LvlTrace:
 		self.Print(ctx, i...)
@@ -321,7 +321,7 @@ func (self Observer) WithLevel(ctx context.Context, level _level, i ...interface
 	}
 }
 
-func (self Observer) WithLevelf(ctx context.Context, level _level, format string, i ...interface{}) {
+func (self Observer) WithLevelf(ctx context.Context, level Level, format string, i ...interface{}) {
 	switch level {
 	case LvlTrace:
 		self.Printf(ctx, format, i...)

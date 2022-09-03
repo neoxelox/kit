@@ -24,47 +24,35 @@ func ptr[T any](v T) *T {
 	return &v
 }
 
-type _key string
+type Key string
 
 // Builtin context/cache keys.
 var (
-	KeyBase                _key = "kit:"
-	KeyDatabaseTransaction _key = KeyBase + "database:transaction"
-	KeyLocalizerLocale     _key = KeyBase + "localizer:locale"
-	KeyTraceID             _key = KeyBase + "trace:id"
+	KeyBase                Key = "kit:"
+	KeyDatabaseTransaction Key = KeyBase + "database:transaction"
+	KeyLocalizerLocale     Key = KeyBase + "localizer:locale"
+	KeyTraceID             Key = KeyBase + "trace:id"
 )
 
-func Key(key string) _key {
-	return _key(key)
-}
-
-type _environment string
+type Environment string
 
 // Builtin environments.
 var (
-	EnvDevelopment _environment = "dev"
-	EnvProduction  _environment = "prod"
+	EnvDevelopment Environment = "dev"
+	EnvProduction  Environment = "prod"
 )
 
-func Env(env string) _environment {
-	return _environment(env)
-}
-
-type _level int
+type Level int
 
 // Builtin levels.
 var (
-	LvlTrace _level = -5
-	LvlDebug _level = -4
-	LvlInfo  _level = -3
-	LvlWarn  _level = -2
-	LvlError _level = -1
-	LvlNone  _level
+	LvlTrace Level = -5
+	LvlDebug Level = -4
+	LvlInfo  Level = -3
+	LvlWarn  Level = -2
+	LvlError Level = -1
+	LvlNone  Level
 )
-
-func Lvl(lvl int) _level {
-	return _level(lvl)
-}
 
 // Builtin errors.
 var (

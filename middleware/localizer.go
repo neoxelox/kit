@@ -16,7 +16,6 @@ type LocalizerConfig struct {
 }
 
 type Localizer struct {
-	kit.Middleware
 	config    LocalizerConfig
 	observer  kit.Observer
 	localizer kit.Localizer

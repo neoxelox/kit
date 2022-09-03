@@ -13,7 +13,6 @@ type ExceptionConfig struct {
 }
 
 type Exception struct {
-	kit.Middleware
 	config   ExceptionConfig
 	observer kit.Observer
 }
