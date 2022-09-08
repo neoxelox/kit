@@ -142,6 +142,10 @@ func (self *Server) Host(host string, middleware ...echo.MiddlewareFunc) *echo.G
 	return self.server.Host(host, middleware...)
 }
 
+func (self *Server) Default(middleware ...echo.MiddlewareFunc) *echo.Group {
+	return self.server.Group("", middleware...)
+}
+
 func (self *Server) Close(ctx context.Context) error {
 	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		self.observer.Info(ctx, "Closing server")
