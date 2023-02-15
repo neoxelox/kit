@@ -37,7 +37,6 @@ type MigratorConfig struct {
 	DatabaseUser     string
 	DatabasePassword string
 	DatabaseName     string
-	RetryConfig      *MigratorRetryConfig
 }
 
 type Migrator struct {
@@ -47,15 +46,16 @@ type Migrator struct {
 	done     chan struct{}
 }
 
-func NewMigrator(ctx context.Context, observer Observer, config MigratorConfig) (*Migrator, error) {
+func NewMigrator(ctx context.Context, observer Observer, config MigratorConfig,
+	retry *MigratorRetryConfig) (*Migrator, error) {
 	if config.MigrationsPath == nil {
 		config.MigrationsPath = ptr(_MIGRATOR_DEFAULT_MIGRATIONS_PATH)
 	}
 
 	*config.MigrationsPath = fmt.Sprintf("file://%s", filepath.Clean(*config.MigrationsPath))
 
-	if config.RetryConfig == nil {
-		config.RetryConfig = &MigratorRetryConfig{
+	if retry == nil {
+		retry = &MigratorRetryConfig{
 			Attempts:     _MIGRATOR_DEFAULT_RETRY_ATTEMPTS,
 			InitialDelay: _MIGRATOR_DEFAULT_RETRY_INITIAL_DELAY,
 			LimitDelay:   _MIGRATOR_DEFAULT_RETRY_LIMIT_DELAY,
@@ -77,12 +77,12 @@ func NewMigrator(ctx context.Context, observer Observer, config MigratorConfig) 
 	// TODO: only retry on specific errors
 	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		return Utils.ExponentialRetry(
-			config.RetryConfig.Attempts, config.RetryConfig.InitialDelay, config.RetryConfig.LimitDelay,
+			retry.Attempts, retry.InitialDelay, retry.LimitDelay,
 			nil, func(attempt int) error {
 				var err error
 
 				observer.Infof(ctx, "Trying to connect to the %s database %d/%d",
-					config.DatabaseName, attempt, config.RetryConfig.Attempts)
+					config.DatabaseName, attempt, retry.Attempts)
 
 				migrator, err = migrate.New(*config.MigrationsPath, dsn)
 				if err != nil {

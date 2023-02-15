@@ -48,7 +48,6 @@ type CacheConfig struct {
 	CacheWriteTimeout    *time.Duration
 	CacheDialTimeout     *time.Duration
 	CacheAcquireTimeout  *time.Duration
-	RetryConfig          *CacheRetryConfig
 }
 
 type Cache struct {
@@ -58,7 +57,7 @@ type Cache struct {
 	cache    *cache.Cache
 }
 
-func NewCache(ctx context.Context, observer Observer, config CacheConfig) (*Cache, error) {
+func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry *CacheRetryConfig) (*Cache, error) {
 	if config.CacheMinConns == nil {
 		config.CacheMinConns = ptr(_CACHE_DEFAULT_MIN_CONNS)
 	}
@@ -91,8 +90,8 @@ func NewCache(ctx context.Context, observer Observer, config CacheConfig) (*Cach
 		config.CacheAcquireTimeout = ptr(_CACHE_DEFAULT_ACQUIRE_TIMEOUT)
 	}
 
-	if config.RetryConfig == nil {
-		config.RetryConfig = &CacheRetryConfig{
+	if retry == nil {
+		retry = &CacheRetryConfig{
 			Attempts:     _CACHE_DEFAULT_RETRY_ATTEMPTS,
 			InitialDelay: _CACHE_DEFAULT_RETRY_INITIAL_DELAY,
 			LimitDelay:   _CACHE_DEFAULT_RETRY_LIMIT_DELAY,
@@ -121,11 +120,11 @@ func NewCache(ctx context.Context, observer Observer, config CacheConfig) (*Cach
 	// TODO: only retry on specific errors
 	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		return Utils.ExponentialRetry(
-			config.RetryConfig.Attempts, config.RetryConfig.InitialDelay, config.RetryConfig.LimitDelay,
+			retry.Attempts, retry.InitialDelay, retry.LimitDelay,
 			nil, func(attempt int) error {
 				var err error // nolint
 
-				observer.Infof(ctx, "Trying to connect to the cache %d/%d", attempt, config.RetryConfig.Attempts)
+				observer.Infof(ctx, "Trying to connect to the cache %d/%d", attempt, retry.Attempts)
 
 				pool = redis.NewClient(poolConfig)
 

@@ -52,7 +52,6 @@ type ObserverConfig struct {
 	Level        Level
 	SentryConfig *ObserverSentryConfig
 	GilkConfig   *ObserverGilkConfig
-	RetryConfig  *ObserverRetryConfig
 }
 
 type Observer struct {
@@ -60,9 +59,9 @@ type Observer struct {
 	Logger
 }
 
-func NewObserver(ctx context.Context, config ObserverConfig) (*Observer, error) {
-	if config.RetryConfig == nil {
-		config.RetryConfig = &ObserverRetryConfig{
+func NewObserver(ctx context.Context, config ObserverConfig, retry *ObserverRetryConfig) (*Observer, error) {
+	if retry == nil {
+		retry = &ObserverRetryConfig{
 			Attempts:     _OBSERVER_DEFAULT_RETRY_ATTEMPTS,
 			InitialDelay: _OBSERVER_DEFAULT_RETRY_INITIAL_DELAY,
 			LimitDelay:   _OBSERVER_DEFAULT_RETRY_LIMIT_DELAY,
@@ -79,9 +78,9 @@ func NewObserver(ctx context.Context, config ObserverConfig) (*Observer, error) 
 		// TODO: only retry on specific errors
 		err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
 			return Utils.ExponentialRetry(
-				config.RetryConfig.Attempts, config.RetryConfig.InitialDelay, config.RetryConfig.LimitDelay,
+				retry.Attempts, retry.InitialDelay, retry.LimitDelay,
 				nil, func(attempt int) error {
-					logger.Infof("Trying to connect to the Sentry service %d/%d", attempt, config.RetryConfig.Attempts)
+					logger.Infof("Trying to connect to the Sentry service %d/%d", attempt, retry.Attempts)
 
 					err := sentry.Init(sentry.ClientOptions{
 						Dsn:              config.SentryConfig.Dsn,

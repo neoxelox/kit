@@ -59,7 +59,6 @@ type DatabaseConfig struct {
 	DatabaseMaxConns        *int
 	DatabaseMaxConnIdleTime *time.Duration
 	DatabaseMaxConnLifeTime *time.Duration
-	RetryConfig             *DatabaseRetryConfig
 }
 
 type Database struct {
@@ -68,7 +67,8 @@ type Database struct {
 	pool     *pgxpool.Pool
 }
 
-func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig) (*Database, error) {
+func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig,
+	retry *DatabaseRetryConfig) (*Database, error) {
 	if config.DatabaseMinConns == nil {
 		config.DatabaseMinConns = ptr(_DATABASE_DEFAULT_MIN_CONNS)
 	}
@@ -85,8 +85,8 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig) 
 		config.DatabaseMaxConnLifeTime = ptr(_DATABASE_DEFAULT_MAX_CONN_LIFE_TIME)
 	}
 
-	if config.RetryConfig == nil {
-		config.RetryConfig = &DatabaseRetryConfig{
+	if retry == nil {
+		retry = &DatabaseRetryConfig{
 			Attempts:     _DATABASE_DEFAULT_RETRY_ATTEMPTS,
 			InitialDelay: _DATABASE_DEFAULT_RETRY_INITIAL_DELAY,
 			LimitDelay:   _DATABASE_DEFAULT_RETRY_LIMIT_DELAY,
@@ -131,12 +131,12 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig) 
 	// TODO: only retry on specific errors
 	err = Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		return Utils.ExponentialRetry(
-			config.RetryConfig.Attempts, config.RetryConfig.InitialDelay, config.RetryConfig.LimitDelay,
+			retry.Attempts, retry.InitialDelay, retry.LimitDelay,
 			nil, func(attempt int) error {
 				var err error // nolint
 
 				observer.Infof(ctx, "Trying to connect to the %s database %d/%d",
-					config.DatabaseName, attempt, config.RetryConfig.Attempts)
+					config.DatabaseName, attempt, retry.Attempts)
 
 				pool, err = pgxpool.ConnectConfig(ctx, poolConfig)
 				if err != nil {
