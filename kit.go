@@ -81,6 +81,10 @@ var (
 	ErrCacheTimedOut              = NewError("cache timed out")
 	ErrCacheUnhealthy             = NewError("cache unhealthy")
 	ErrCacheMiss                  = NewError("cache key not found")
+	ErrWorkerGeneric              = NewError("worker failed")
+	ErrWorkerTimedOut             = NewError("worker timed out")
+	ErrEnqueuerGeneric            = NewError("enqueuer failed")
+	ErrEnqueuerTimedOut           = NewError("enqueuer timed out")
 )
 
 // Builtin exceptions.
