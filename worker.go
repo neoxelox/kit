@@ -103,6 +103,12 @@ func NewWorker(observer Observer, config WorkerConfig) *Worker {
 
 	asynqLogger := _newAsynqLogger(&observer)
 	asynqLogLevel := _KlevelToAlevel[asynqLogger.observer.Level()]
+
+	// Asynq debug level is too much!
+	if asynqLogLevel <= asynq.DebugLevel {
+		asynqLogLevel = asynq.InfoLevel
+	}
+
 	asynqErrorHandler := _newAsynqErrorHandler(&observer)
 
 	serverConfig := asynq.Config{
