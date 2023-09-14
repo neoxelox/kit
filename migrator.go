@@ -342,7 +342,7 @@ func _newMigrateLogger(observer *Observer) *_migrateLogger {
 	}
 }
 
-func (self _migrateLogger) Printf(format string, v ...interface{}) {
+func (self _migrateLogger) Printf(format string, v ...any) {
 	self.observer.Infof(context.Background(), strings.TrimSpace(format), v...)
 }
 

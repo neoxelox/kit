@@ -246,10 +246,10 @@ func (self _utils) ExponentialRetry(
 		})
 }
 
-func (self _utils) Copy(src interface{}) interface{} {
+func (self _utils) Copy(src any) any {
 	return self.copier.Copy(src)
 }
 
-func (self _utils) Equals(first interface{}, second interface{}) bool {
+func (self _utils) Equals(first any, second any) bool {
 	return cmp.Equal(first, second)
 }

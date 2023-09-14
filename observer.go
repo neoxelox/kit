@@ -9,6 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/getsentry/sentry-go"
+	"github.com/hibiken/asynq"
 	"github.com/neoxelox/gilk"
 	"github.com/rs/xid"
 )
@@ -132,7 +133,7 @@ func NewObserver(ctx context.Context, config ObserverConfig, retry *ObserverRetr
 	}, nil
 }
 
-func (self Observer) Print(ctx context.Context, i ...interface{}) { // nolint
+func (self Observer) Print(ctx context.Context, i ...any) { // nolint
 	if !(LvlTrace >= self.config.Level) {
 		return
 	}
@@ -140,7 +141,7 @@ func (self Observer) Print(ctx context.Context, i ...interface{}) { // nolint
 	self.Logger.Print(i...)
 }
 
-func (self Observer) Printf(ctx context.Context, format string, i ...interface{}) { // nolint
+func (self Observer) Printf(ctx context.Context, format string, i ...any) { // nolint
 	if !(LvlTrace >= self.config.Level) {
 		return
 	}
@@ -148,7 +149,7 @@ func (self Observer) Printf(ctx context.Context, format string, i ...interface{}
 	self.Logger.Printf(format, i...)
 }
 
-func (self Observer) Debug(ctx context.Context, i ...interface{}) { // nolint
+func (self Observer) Debug(ctx context.Context, i ...any) { // nolint
 	if !(LvlDebug >= self.config.Level) {
 		return
 	}
@@ -156,7 +157,7 @@ func (self Observer) Debug(ctx context.Context, i ...interface{}) { // nolint
 	self.Logger.Debug(i...)
 }
 
-func (self Observer) Debugf(ctx context.Context, format string, i ...interface{}) { // nolint
+func (self Observer) Debugf(ctx context.Context, format string, i ...any) { // nolint
 	if !(LvlDebug >= self.config.Level) {
 		return
 	}
@@ -164,7 +165,7 @@ func (self Observer) Debugf(ctx context.Context, format string, i ...interface{}
 	self.Logger.Debugf(format, i...)
 }
 
-func (self Observer) Info(ctx context.Context, i ...interface{}) { // nolint
+func (self Observer) Info(ctx context.Context, i ...any) { // nolint
 	if !(LvlInfo >= self.config.Level) {
 		return
 	}
@@ -172,7 +173,7 @@ func (self Observer) Info(ctx context.Context, i ...interface{}) { // nolint
 	self.Logger.Info(i...)
 }
 
-func (self Observer) Infof(ctx context.Context, format string, i ...interface{}) { // nolint
+func (self Observer) Infof(ctx context.Context, format string, i ...any) { // nolint
 	if !(LvlInfo >= self.config.Level) {
 		return
 	}
@@ -180,7 +181,7 @@ func (self Observer) Infof(ctx context.Context, format string, i ...interface{})
 	self.Logger.Infof(format, i...)
 }
 
-func (self Observer) Warn(ctx context.Context, i ...interface{}) { // nolint
+func (self Observer) Warn(ctx context.Context, i ...any) { // nolint
 	if !(LvlWarn >= self.config.Level) {
 		return
 	}
@@ -188,7 +189,7 @@ func (self Observer) Warn(ctx context.Context, i ...interface{}) { // nolint
 	self.Logger.Warn(i...)
 }
 
-func (self Observer) Warnf(ctx context.Context, format string, i ...interface{}) { // nolint
+func (self Observer) Warnf(ctx context.Context, format string, i ...any) { // nolint
 	if !(LvlWarn >= self.config.Level) {
 		return
 	}
@@ -196,13 +197,13 @@ func (self Observer) Warnf(ctx context.Context, format string, i ...interface{})
 	self.Logger.Warnf(format, i...)
 }
 
-func (self Observer) sendErrToSentry(ctx context.Context, i ...interface{}) {
+func (self Observer) sendErrToSentry(ctx context.Context, i ...any) {
 	if len(i) == 0 {
 		return
 	}
 
 	var sentryEvent *sentry.Event
-	var sentryEventExtra map[string]interface{}
+	var sentryEventExtra map[string]any
 
 	switch err := i[0].(type) {
 	case nil:
@@ -233,7 +234,7 @@ func (self Observer) sendErrToSentry(ctx context.Context, i ...interface{}) {
 	sentryHub.CaptureEvent(sentryEvent)
 }
 
-func (self Observer) Error(ctx context.Context, i ...interface{}) {
+func (self Observer) Error(ctx context.Context, i ...any) {
 	if !(LvlError >= self.config.Level) {
 		return
 	}
@@ -245,7 +246,7 @@ func (self Observer) Error(ctx context.Context, i ...interface{}) {
 	}
 }
 
-func (self Observer) Errorf(ctx context.Context, format string, i ...interface{}) {
+func (self Observer) Errorf(ctx context.Context, format string, i ...any) {
 	if !(LvlError >= self.config.Level) {
 		return
 	}
@@ -257,7 +258,7 @@ func (self Observer) Errorf(ctx context.Context, format string, i ...interface{}
 	}
 }
 
-func (self Observer) Fatal(ctx context.Context, i ...interface{}) {
+func (self Observer) Fatal(ctx context.Context, i ...any) {
 	if !(LvlError >= self.config.Level) {
 		return
 	}
@@ -269,7 +270,7 @@ func (self Observer) Fatal(ctx context.Context, i ...interface{}) {
 	}
 }
 
-func (self Observer) Fatalf(ctx context.Context, format string, i ...interface{}) {
+func (self Observer) Fatalf(ctx context.Context, format string, i ...any) {
 	if !(LvlError >= self.config.Level) {
 		return
 	}
@@ -281,7 +282,7 @@ func (self Observer) Fatalf(ctx context.Context, format string, i ...interface{}
 	}
 }
 
-func (self Observer) Panic(ctx context.Context, i ...interface{}) {
+func (self Observer) Panic(ctx context.Context, i ...any) {
 	if !(LvlError >= self.config.Level) {
 		return
 	}
@@ -293,7 +294,7 @@ func (self Observer) Panic(ctx context.Context, i ...interface{}) {
 	}
 }
 
-func (self Observer) Panicf(ctx context.Context, format string, i ...interface{}) {
+func (self Observer) Panicf(ctx context.Context, format string, i ...any) {
 	if !(LvlError >= self.config.Level) {
 		return
 	}
@@ -305,7 +306,7 @@ func (self Observer) Panicf(ctx context.Context, format string, i ...interface{}
 	}
 }
 
-func (self Observer) WithLevel(ctx context.Context, level Level, i ...interface{}) {
+func (self Observer) WithLevel(ctx context.Context, level Level, i ...any) {
 	switch level {
 	case LvlTrace:
 		self.Print(ctx, i...)
@@ -320,7 +321,7 @@ func (self Observer) WithLevel(ctx context.Context, level Level, i ...interface{
 	}
 }
 
-func (self Observer) WithLevelf(ctx context.Context, level Level, format string, i ...interface{}) {
+func (self Observer) WithLevelf(ctx context.Context, level Level, format string, i ...any) {
 	switch level {
 	case LvlTrace:
 		self.Printf(ctx, format, i...)
@@ -435,7 +436,7 @@ func (self Observer) TraceRequest(ctx context.Context, request *http.Request) (c
 	}
 }
 
-func (self Observer) TraceQuery(ctx context.Context, sql string, args ...interface{}) (context.Context, func()) {
+func (self Observer) TraceQuery(ctx context.Context, sql string, args ...any) (context.Context, func()) {
 	traceID := self.GetTrace(ctx)
 	ctx = self.SetTrace(ctx, traceID)
 
@@ -446,7 +447,7 @@ func (self Observer) TraceQuery(ctx context.Context, sql string, args ...interfa
 
 	var endGilkQuery func()
 	if self.config.GilkConfig != nil { // nolint
-		dArgs := make([]interface{}, len(args))
+		dArgs := make([]any, len(args))
 
 		copy(dArgs, args)
 
@@ -476,6 +477,37 @@ func (self Observer) TraceQuery(ctx context.Context, sql string, args ...interfa
 			endGilkQuery()
 		}
 
+		if self.config.SentryConfig != nil {
+			sentrySpan.Finish()
+		}
+	}
+}
+
+func (self Observer) TraceTask(ctx context.Context, task *asynq.Task) (context.Context, func()) {
+	traceID := self.GetTrace(ctx)
+	ctx = self.SetTrace(ctx, traceID)
+
+	spanName := task.Type()
+
+	var sentrySpan *sentry.Span
+	if self.config.SentryConfig != nil { // nolint
+		sentryHub := sentry.GetHubFromContext(ctx)
+		if sentryHub == nil {
+			sentryHub = sentry.CurrentHub().Clone()
+		}
+
+		sentryHub.Scope().SetTag(_OBSERVER_SENTRY_TRACE_ID_TAG, traceID.String())
+		if sentryHub.Scope().Transaction() == "" { // nolint
+			sentryHub.Scope().SetTransaction(spanName)
+		}
+
+		ctx = sentry.SetHubOnContext(ctx, sentryHub)
+
+		sentrySpan = sentry.StartSpan(ctx, spanName)
+		ctx = sentrySpan.Context()
+	}
+
+	return ctx, func() {
 		if self.config.SentryConfig != nil {
 			sentrySpan.Finish()
 		}

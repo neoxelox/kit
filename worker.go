@@ -167,7 +167,7 @@ func (self *Worker) Register(task string, handler func(context.Context, *asynq.T
 	self.register.HandleFunc(task, handler)
 }
 
-func (self *Worker) Schedule(task string, params interface{}, cron string, options ...asynq.Option) {
+func (self *Worker) Schedule(task string, params any, cron string, options ...asynq.Option) {
 	payload, err := json.Marshal(params)
 	if err != nil {
 		self.observer.Panicf(context.Background(), "%s: %v", task, err)
@@ -211,23 +211,23 @@ func _newAsynqLogger(observer *Observer) *_asynqLogger {
 	}
 }
 
-func (self _asynqLogger) Debug(args ...interface{}) {
+func (self _asynqLogger) Debug(args ...any) {
 	self.observer.Debug(context.Background(), args...)
 }
 
-func (self _asynqLogger) Info(args ...interface{}) {
+func (self _asynqLogger) Info(args ...any) {
 	self.observer.Info(context.Background(), args...)
 }
 
-func (self _asynqLogger) Warn(args ...interface{}) {
+func (self _asynqLogger) Warn(args ...any) {
 	self.observer.Warn(context.Background(), args...)
 }
 
-func (self _asynqLogger) Error(args ...interface{}) {
+func (self _asynqLogger) Error(args ...any) {
 	self.observer.Error(context.Background(), args...)
 }
 
-func (self _asynqLogger) Fatal(args ...interface{}) {
+func (self _asynqLogger) Fatal(args ...any) {
 	self.observer.Fatal(context.Background(), args...)
 }
 
@@ -246,7 +246,7 @@ func (self _asynqErrorHandler) handleError(task *asynq.Task, err error) {
 }
 
 func (self _asynqErrorHandler) HandleProcessError(_ context.Context, task *asynq.Task, err error) {
-	self.handleError(task, err)
+	self.handleError(task, err) // nolint: contextcheck
 }
 
 func (self _asynqErrorHandler) HandleEnqueueError(task *asynq.Task, _ []asynq.Option, err error) {

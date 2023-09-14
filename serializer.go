@@ -23,7 +23,7 @@ func NewSerializer(observer Observer, config SerializerConfig) *Serializer {
 	}
 }
 
-func (self *Serializer) Serialize(c echo.Context, i interface{}, indent string) error {
+func (self *Serializer) Serialize(c echo.Context, i any, indent string) error {
 	encoder := json.NewEncoder(c.Response())
 
 	if indent != "" {
@@ -40,7 +40,7 @@ func (self *Serializer) Serialize(c echo.Context, i interface{}, indent string) 
 	return nil
 }
 
-func (self *Serializer) Deserialize(c echo.Context, i interface{}) error {
+func (self *Serializer) Deserialize(c echo.Context, i any) error {
 	decoder := json.NewDecoder(c.Request().Body)
 
 	err := decoder.Decode(i)

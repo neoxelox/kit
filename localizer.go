@@ -136,7 +136,7 @@ func (self Localizer) GetLocale(ctx context.Context) language.Tag {
 	return self.config.DefaultLocale
 }
 
-func (self Localizer) Localize(ctx context.Context, copy string, i ...interface{}) string { // nolint
+func (self Localizer) Localize(ctx context.Context, copy string, i ...any) string { // nolint
 	copy = strings.ToUpper(copy) // nolint
 
 	if trans, ok := (*self.copies)[self.GetLocale(ctx)][copy]; ok {

@@ -203,7 +203,7 @@ func _chErrToError(err error) *Error {
 	}
 }
 
-func (self *Cache) Set(ctx context.Context, key string, value interface{}, ttl *time.Duration) error {
+func (self *Cache) Set(ctx context.Context, key string, value any, ttl *time.Duration) error {
 	if ttl == nil {
 		ttl = ptr(0 * time.Second)
 	}
@@ -222,7 +222,7 @@ func (self *Cache) Set(ctx context.Context, key string, value interface{}, ttl *
 	return nil
 }
 
-func (self *Cache) Get(ctx context.Context, key string, dest interface{}) error {
+func (self *Cache) Get(ctx context.Context, key string, dest any) error {
 	err := self.cache.Get(ctx, key, dest)
 	if err != nil {
 		return _chErrToError(err)
@@ -273,6 +273,6 @@ func _newRedisLogger(observer *Observer) *_redisLogger {
 	}
 }
 
-func (self _redisLogger) Printf(ctx context.Context, format string, v ...interface{}) { // nolint
+func (self _redisLogger) Printf(ctx context.Context, format string, v ...any) { // nolint
 	self.observer.Infof(ctx, format, v...)
 }

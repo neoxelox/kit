@@ -385,6 +385,6 @@ func _newPgxLogger(observer *Observer) *_pgxLogger {
 	}
 }
 
-func (self _pgxLogger) Log(ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{}) { // nolint
+func (self _pgxLogger) Log(ctx context.Context, level pgx.LogLevel, msg string, data map[string]any) { // nolint
 	self.observer.WithLevelf(ctx, _PlevelToKlevel[level], "%s: %+v", msg, data)
 }

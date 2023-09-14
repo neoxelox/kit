@@ -72,7 +72,7 @@ func NewEnqueuer(observer Observer, config EnqueuerConfig) *Enqueuer {
 	}
 }
 
-func (self *Enqueuer) Enqueue(ctx context.Context, task string, params interface{}, options ...asynq.Option) error {
+func (self *Enqueuer) Enqueue(ctx context.Context, task string, params any, options ...asynq.Option) error {
 	payload, err := json.Marshal(params)
 	if err != nil {
 		return ErrEnqueuerGeneric().Wrap(err)

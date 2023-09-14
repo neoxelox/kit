@@ -42,7 +42,7 @@ func (self *Timeout) Handle(next echo.HandlerFunc) echo.HandlerFunc {
 		ctx.SetRequest(ctx.Request().WithContext(timeoutCtx))
 
 		finishChan := make(chan struct{}, 1)
-		panicChan := make(chan interface{}, 1)
+		panicChan := make(chan any, 1)
 		timeoutChan := time.After(self.config.Timeout)
 
 		timeoutHandlerCtx := _newTimeoutHandlerCtx(ctx)
@@ -173,7 +173,7 @@ func (self *Timeout) handleTimeout(ctx *_timeoutHandlerCtx) {
 	ctx.handlerCtx.Response().Writer = ctx.timeoutWriter
 }
 
-func (self *Timeout) handlePanickedAfterTimeout(ctx *_timeoutHandlerCtx, rec interface{}) {
+func (self *Timeout) handlePanickedAfterTimeout(ctx *_timeoutHandlerCtx, rec any) {
 	ctx.timeoutWriter.mutex.Lock()
 	defer ctx.timeoutWriter.mutex.Unlock()
 

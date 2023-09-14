@@ -255,6 +255,8 @@ linters-settings:
         disabled: true
       - name: nested-structs
         disabled: true
+      - name: var-declaration
+        disabled: true
 
   # Checks for struct tags correctness.
   tagliatelle:
@@ -322,6 +324,9 @@ linters:
     - gci
     - ifshort
     - nosnakecase
+    - varcheck
+    - structcheck
+    - deadcode
 
 # Options for issue availability.
 issues:

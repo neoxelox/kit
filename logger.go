@@ -188,39 +188,39 @@ func (self *Logger) SetVerbose(v bool) {
 	self.verbose = v
 }
 
-func (self Logger) Print(i ...interface{}) {
+func (self Logger) Print(i ...any) {
 	self.logger.Log().Msg(fmt.Sprint(i...))
 }
 
-func (self Logger) Printf(format string, i ...interface{}) {
+func (self Logger) Printf(format string, i ...any) {
 	self.logger.Log().Msgf(format, i...)
 }
 
-func (self Logger) Debug(i ...interface{}) {
+func (self Logger) Debug(i ...any) {
 	self.logger.Debug().Msg(fmt.Sprint(i...))
 }
 
-func (self Logger) Debugf(format string, i ...interface{}) {
+func (self Logger) Debugf(format string, i ...any) {
 	self.logger.Debug().Msgf(format, i...)
 }
 
-func (self Logger) Info(i ...interface{}) {
+func (self Logger) Info(i ...any) {
 	self.logger.Info().Msg(fmt.Sprint(i...))
 }
 
-func (self Logger) Infof(format string, i ...interface{}) {
+func (self Logger) Infof(format string, i ...any) {
 	self.logger.Info().Msgf(format, i...)
 }
 
-func (self Logger) Warn(i ...interface{}) {
+func (self Logger) Warn(i ...any) {
 	self.logger.Warn().Caller(self.skipFrameCount).Msg(fmt.Sprint(i...))
 }
 
-func (self Logger) Warnf(format string, i ...interface{}) {
+func (self Logger) Warnf(format string, i ...any) {
 	self.logger.Warn().Caller(self.skipFrameCount).Msgf(format, i...)
 }
 
-func (self Logger) printDebugError(i ...interface{}) {
+func (self Logger) printDebugError(i ...any) {
 	if len(i) >= 1 {
 		switch err := i[0].(type) {
 		case *Error:
@@ -239,7 +239,7 @@ func (self Logger) printDebugError(i ...interface{}) {
 	fmt.Printf("\x1b[91m%s\x1b[0m\n", fmt.Sprint(i...)) // nolint
 }
 
-func (self Logger) Error(i ...interface{}) {
+func (self Logger) Error(i ...any) {
 	if LvlDebug >= self.level {
 		self.printDebugError(i...)
 	} else {
@@ -247,7 +247,7 @@ func (self Logger) Error(i ...interface{}) {
 	}
 }
 
-func (self Logger) Errorf(format string, i ...interface{}) {
+func (self Logger) Errorf(format string, i ...any) {
 	if LvlDebug >= self.level {
 		self.printDebugError(fmt.Sprintf(format, i...))
 	} else {
@@ -255,7 +255,7 @@ func (self Logger) Errorf(format string, i ...interface{}) {
 	}
 }
 
-func (self Logger) Fatal(i ...interface{}) {
+func (self Logger) Fatal(i ...any) {
 	if LvlDebug >= self.level {
 		self.printDebugError(i...)
 		os.Exit(1) // nolint
@@ -264,7 +264,7 @@ func (self Logger) Fatal(i ...interface{}) {
 	}
 }
 
-func (self Logger) Fatalf(format string, i ...interface{}) {
+func (self Logger) Fatalf(format string, i ...any) {
 	if LvlDebug >= self.level {
 		self.printDebugError(fmt.Sprintf(format, i...))
 		os.Exit(1) // nolint
@@ -273,7 +273,7 @@ func (self Logger) Fatalf(format string, i ...interface{}) {
 	}
 }
 
-func (self Logger) Panic(i ...interface{}) {
+func (self Logger) Panic(i ...any) {
 	if LvlDebug >= self.level {
 		self.printDebugError(i...)
 		panic(fmt.Sprint(i...))
@@ -282,7 +282,7 @@ func (self Logger) Panic(i ...interface{}) {
 	}
 }
 
-func (self Logger) Panicf(format string, i ...interface{}) {
+func (self Logger) Panicf(format string, i ...any) {
 	if LvlDebug >= self.level {
 		self.printDebugError(fmt.Sprintf(format, i...))
 		panic(fmt.Sprintf(format, i...))
@@ -291,7 +291,7 @@ func (self Logger) Panicf(format string, i ...interface{}) {
 	}
 }
 
-func (self Logger) WithLevel(level Level, i ...interface{}) {
+func (self Logger) WithLevel(level Level, i ...any) {
 	switch level {
 	case LvlTrace:
 		self.Print(i...)
@@ -306,7 +306,7 @@ func (self Logger) WithLevel(level Level, i ...interface{}) {
 	}
 }
 
-func (self Logger) WithLevelf(level Level, format string, i ...interface{}) {
+func (self Logger) WithLevelf(level Level, format string, i ...any) {
 	switch level {
 	case LvlTrace:
 		self.Printf(format, i...)

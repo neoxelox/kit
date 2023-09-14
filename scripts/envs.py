@@ -8,15 +8,15 @@ class Envs(superinvoke.Envs):
 
     Dev = superinvoke.Env(
         name="dev",
-        tags=[Tags.DEV],
+        tags=[*Tags.As("dev*")],
     )
 
     Ci = superinvoke.Env(
         name="ci",
-        tags=[Tags.CI_INT, Tags.CI_PUB],
+        tags=[*Tags.As("ci*")],
     )
 
     Prod = superinvoke.Env(
         name="prod",
-        tags=[Tags.PROD],
+        tags=[*Tags.As("prod*")],
     )

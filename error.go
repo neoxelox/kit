@@ -77,7 +77,7 @@ func (self *Error) With(message string) *Error {
 	return self
 }
 
-func (self *Error) Withf(message string, args ...interface{}) *Error {
+func (self *Error) Withf(message string, args ...any) *Error {
 	self.message = self.message + ": " + fmt.Sprintf(message, args...)
 	self.inner = errors.NewWithDepth(1, self.message)
 

@@ -21,7 +21,7 @@ func NewBinder(observer Observer, config BinderConfig) *Binder {
 	}
 }
 
-func (self *Binder) Bind(i interface{}, c echo.Context) error {
+func (self *Binder) Bind(i any, c echo.Context) error {
 	if err := self.binder.Bind(i, c); err != nil {
 		return ErrBinderGeneric().Wrap(err)
 	}

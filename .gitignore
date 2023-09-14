@@ -6,6 +6,7 @@
 *.tmPreferences.cache
 *.stTheme.cache
 *.sublime-workspace
+.DS_Store
 
 # Binaries for programs and plugins
 *.exe
