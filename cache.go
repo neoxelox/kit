@@ -26,14 +26,17 @@ var (
 	_CACHE_DEFAULT_RETRY_ATTEMPTS      = 1
 	_CACHE_DEFAULT_RETRY_INITIAL_DELAY = 0 * time.Second
 	_CACHE_DEFAULT_RETRY_LIMIT_DELAY   = 0 * time.Second
-	_CACHE_LOCAL_SIZE                  = 1000
-	_CACHE_LOCAL_TTL                   = 1 * time.Minute
 )
 
 type CacheRetryConfig struct {
 	Attempts     int
 	InitialDelay time.Duration
 	LimitDelay   time.Duration
+}
+
+type CacheLocalConfig struct {
+	Size int
+	TTL  time.Duration
 }
 
 type CacheConfig struct {
@@ -48,6 +51,7 @@ type CacheConfig struct {
 	CacheWriteTimeout    *time.Duration
 	CacheDialTimeout     *time.Duration
 	CacheAcquireTimeout  *time.Duration
+	CacheLocalConfig     *CacheLocalConfig
 }
 
 type Cache struct {
@@ -115,6 +119,11 @@ func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry 
 		PoolTimeout:  *config.CacheAcquireTimeout,
 	}
 
+	var localCache *cache.TinyLFU
+	if config.CacheLocalConfig != nil {
+		localCache = cache.NewTinyLFU(config.CacheLocalConfig.Size, config.CacheLocalConfig.TTL)
+	}
+
 	var pool *redis.Client
 
 	// TODO: only retry on specific errors
@@ -148,7 +157,7 @@ func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry 
 
 	cache := cache.New(&cache.Options{
 		Redis:        pool,
-		LocalCache:   cache.NewTinyLFU(_CACHE_LOCAL_SIZE, _CACHE_LOCAL_TTL),
+		LocalCache:   localCache,
 		StatsEnabled: false,
 	})
 
