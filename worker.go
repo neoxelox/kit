@@ -241,14 +241,14 @@ func _newAsynqErrorHandler(observer *Observer) *_asynqErrorHandler {
 	}
 }
 
-func (self _asynqErrorHandler) handleError(task *asynq.Task, err error) {
-	self.observer.Errorf(context.Background(), "%s: %v", task.Type(), err)
+func (self _asynqErrorHandler) handleError(ctx context.Context, task *asynq.Task, err error) {
+	self.observer.Errorf(ctx, "%s: %v", task.Type(), err)
 }
 
-func (self _asynqErrorHandler) HandleProcessError(_ context.Context, task *asynq.Task, err error) {
-	self.handleError(task, err) // nolint: contextcheck
+func (self _asynqErrorHandler) HandleProcessError(ctx context.Context, task *asynq.Task, err error) {
+	self.handleError(ctx, task, err)
 }
 
 func (self _asynqErrorHandler) HandleEnqueueError(task *asynq.Task, _ []asynq.Option, err error) {
-	self.handleError(task, err)
+	self.handleError(context.Background(), task, err)
 }

@@ -24,7 +24,7 @@ var (
 	_DATABASE_DEFAULT_MAX_CONNS          = 1 * runtime.GOMAXPROCS(-1)
 	_DATABASE_DEFAULT_MAX_CONN_IDLE_TIME = 30 * time.Minute
 	_DATABASE_DEFAULT_MAX_CONN_LIFE_TIME = 1 * time.Hour
-	// _DATABASEDEFAULT_DIAL_TIMEOUT  = 30 * time.Second // TODO: check where this goes
+	// _DATABASE_DEFAULT_DIAL_TIMEOUT  = 30 * time.Second // TODO: check where this goes
 	// _DATABASE_DEFAULT_ACQUIRE_TIMEOUT  = 30 * time.Second // TODO: check where this goes
 	_DATABASE_DEFAULT_RETRY_ATTEMPTS      = 1
 	_DATABASE_DEFAULT_RETRY_INITIAL_DELAY = 0 * time.Second
