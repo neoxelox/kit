@@ -119,7 +119,7 @@ func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry 
 		PoolTimeout:  *config.CacheAcquireTimeout,
 	}
 
-	var localCache *cache.TinyLFU
+	var localCache cache.LocalCache
 	if config.CacheLocalConfig != nil {
 		localCache = cache.NewTinyLFU(config.CacheLocalConfig.Size, config.CacheLocalConfig.TTL)
 	}
