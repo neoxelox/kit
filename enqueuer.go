@@ -2,6 +2,7 @@ package kit
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"runtime"
@@ -24,6 +25,7 @@ var (
 type EnqueuerConfig struct {
 	CacheHost         string
 	CachePort         int
+	CacheSSLMode      bool
 	CachePassword     string
 	CacheMaxConns     *int
 	CacheReadTimeout  *time.Duration
@@ -56,8 +58,16 @@ func NewEnqueuer(observer Observer, config EnqueuerConfig) *Enqueuer {
 
 	dsn := fmt.Sprintf(_ENQUEUER_REDIS_DSN, config.CacheHost, config.CachePort)
 
+	var ssl *tls.Config
+	if config.CacheSSLMode {
+		ssl = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		}
+	}
+
 	redisConfig := asynq.RedisClientOpt{
 		Addr:         dsn,
+		TLSConfig:    ssl,
 		Password:     config.CachePassword,
 		DialTimeout:  *config.CacheDialTimeout,
 		ReadTimeout:  *config.CacheReadTimeout,

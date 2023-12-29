@@ -2,6 +2,7 @@ package kit
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"runtime"
@@ -37,6 +38,7 @@ var _KlevelToAlevel = map[Level]asynq.LogLevel{
 type WorkerConfig struct {
 	CacheHost            string
 	CachePort            int
+	CacheSSLMode         bool
 	CachePassword        string
 	CacheMaxConns        *int
 	CacheReadTimeout     *time.Duration
@@ -92,8 +94,16 @@ func NewWorker(observer Observer, config WorkerConfig) *Worker {
 
 	dsn := fmt.Sprintf(_WORKER_REDIS_DSN, config.CacheHost, config.CachePort)
 
+	var ssl *tls.Config
+	if config.CacheSSLMode {
+		ssl = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		}
+	}
+
 	redisConfig := asynq.RedisClientOpt{
 		Addr:         dsn,
+		TLSConfig:    ssl,
 		Password:     config.CachePassword,
 		DialTimeout:  *config.CacheDialTimeout,
 		ReadTimeout:  *config.CacheReadTimeout,
