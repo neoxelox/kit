@@ -2,6 +2,7 @@ package kit
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"runtime"
 	"time"
@@ -42,6 +43,7 @@ type CacheLocalConfig struct {
 type CacheConfig struct {
 	CacheHost            string
 	CachePort            int
+	CacheSSLMode         bool
 	CachePassword        string
 	CacheMinConns        *int
 	CacheMaxConns        *int
@@ -106,8 +108,16 @@ func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry 
 
 	dsn := fmt.Sprintf(_CACHE_REDIS_DSN, config.CacheHost, config.CachePort)
 
+	var ssl *tls.Config
+	if config.CacheSSLMode {
+		ssl = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		}
+	}
+
 	poolConfig := &redis.Options{
 		Addr:         dsn,
+		TLSConfig:    ssl,
 		Password:     config.CachePassword,
 		MinIdleConns: *config.CacheMinConns,
 		PoolSize:     *config.CacheMaxConns,
