@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/neoxelox/kit/util"
 )
 
 const (
@@ -61,31 +62,31 @@ type Worker struct {
 
 func NewWorker(observer Observer, config WorkerConfig) *Worker {
 	if config.CacheMaxConns == nil {
-		config.CacheMaxConns = ptr(_WORKER_DEFAULT_MAX_CONNS)
+		config.CacheMaxConns = util.Pointer(_WORKER_DEFAULT_MAX_CONNS)
 	}
 
 	if config.CacheReadTimeout == nil {
-		config.CacheReadTimeout = ptr(_WORKER_DEFAULT_READ_TIMEOUT)
+		config.CacheReadTimeout = util.Pointer(_WORKER_DEFAULT_READ_TIMEOUT)
 	}
 
 	if config.CacheWriteTimeout == nil {
-		config.CacheWriteTimeout = ptr(_WORKER_DEFAULT_WRITE_TIMEOUT)
+		config.CacheWriteTimeout = util.Pointer(_WORKER_DEFAULT_WRITE_TIMEOUT)
 	}
 
 	if config.CacheDialTimeout == nil {
-		config.CacheDialTimeout = ptr(_WORKER_DEFAULT_DIAL_TIMEOUT)
+		config.CacheDialTimeout = util.Pointer(_WORKER_DEFAULT_DIAL_TIMEOUT)
 	}
 
 	if config.WorkerConcurrency == nil {
-		config.WorkerConcurrency = ptr(_WORKER_DEFAULT_CONCURRENCY)
+		config.WorkerConcurrency = util.Pointer(_WORKER_DEFAULT_CONCURRENCY)
 	}
 
 	if config.WorkerStrictPriority == nil {
-		config.WorkerStrictPriority = ptr(_WORKER_DEFAULT_STRICT_PRIORITY)
+		config.WorkerStrictPriority = util.Pointer(_WORKER_DEFAULT_STRICT_PRIORITY)
 	}
 
 	if config.WorkerStopTimeout == nil {
-		config.WorkerStopTimeout = ptr(_WORKER_DEFAULT_STOP_TIMEOUT)
+		config.WorkerStopTimeout = util.Pointer(_WORKER_DEFAULT_STOP_TIMEOUT)
 	}
 
 	if config.WorkerTimeZone == nil {
@@ -190,7 +191,7 @@ func (self *Worker) Schedule(task string, params any, cron string, options ...as
 }
 
 func (self *Worker) Close(ctx context.Context) error {
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		self.observer.Info(ctx, "Closing worker")
 
 		self.scheduler.Shutdown()
@@ -204,7 +205,7 @@ func (self *Worker) Close(ctx context.Context) error {
 	switch {
 	case err == nil:
 		return nil
-	case ErrDeadlineExceeded().Is(err):
+	case util.ErrDeadlineExceeded.Is(err):
 		return ErrWorkerTimedOut()
 	default:
 		return ErrWorkerGeneric().Wrap(err)

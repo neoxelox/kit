@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/neoxelox/kit/util"
 	"golang.org/x/text/language"
 	"gopkg.in/yaml.v3"
 )
@@ -34,7 +35,7 @@ type Localizer struct {
 
 func NewLocalizer(observer Observer, config LocalizerConfig) (*Localizer, error) {
 	if config.LocalesPath == nil {
-		config.LocalesPath = ptr(_LOCALIZER_DEFAULT_LOCALES_PATH)
+		config.LocalesPath = util.Pointer(_LOCALIZER_DEFAULT_LOCALES_PATH)
 	}
 
 	config.LocaleExtensions = _LOCALIZER_DEFAULT_LOCALE_EXTENSIONS.Copy()

@@ -10,6 +10,7 @@ import (
 	"regexp"
 
 	"github.com/labstack/echo/v4"
+	"github.com/neoxelox/kit/util"
 )
 
 var (
@@ -30,7 +31,7 @@ type Renderer struct {
 
 func NewRenderer(observer Observer, config RendererConfig) (*Renderer, error) {
 	if config.TemplatesPath == nil {
-		config.TemplatesPath = ptr(_RENDERER_DEFAULT_TEMPLATES_PATH)
+		config.TemplatesPath = util.Pointer(_RENDERER_DEFAULT_TEMPLATES_PATH)
 	}
 
 	if config.TemplateExtensions == nil {

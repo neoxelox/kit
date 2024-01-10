@@ -11,6 +11,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/neoxelox/kit/util"
 )
 
 const _MIGRATOR_POSTGRES_DSN = "postgresql://%s:%s@%s:%d/%s?sslmode=%s&x-multi-statement=true"
@@ -49,7 +50,7 @@ type Migrator struct {
 func NewMigrator(ctx context.Context, observer Observer, config MigratorConfig,
 	retry *MigratorRetryConfig) (*Migrator, error) {
 	if config.MigrationsPath == nil {
-		config.MigrationsPath = ptr(_MIGRATOR_DEFAULT_MIGRATIONS_PATH)
+		config.MigrationsPath = util.Pointer(_MIGRATOR_DEFAULT_MIGRATIONS_PATH)
 	}
 
 	*config.MigrationsPath = fmt.Sprintf("file://%s", filepath.Clean(*config.MigrationsPath))
@@ -74,11 +75,10 @@ func NewMigrator(ctx context.Context, observer Observer, config MigratorConfig,
 
 	var migrator *migrate.Migrate
 
-	// TODO: only retry on specific errors
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
-		return Utils.ExponentialRetry(
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
+		return util.ExponentialRetry(
 			retry.Attempts, retry.InitialDelay, retry.LimitDelay,
-			nil, func(attempt int) error {
+			[]error{}, func(attempt int) error {
 				var err error
 
 				observer.Infof(ctx, "Trying to connect to the %s database %d/%d",
@@ -94,7 +94,7 @@ func NewMigrator(ctx context.Context, observer Observer, config MigratorConfig,
 	})
 	switch {
 	case err == nil:
-	case ErrDeadlineExceeded().Is(err):
+	case util.ErrDeadlineExceeded.Is(err):
 		return nil, ErrMigratorTimedOut()
 	default:
 		return nil, ErrMigratorGeneric().Wrap(err)
@@ -123,7 +123,7 @@ func (self *Migrator) Assert(ctx context.Context, schemaVersion int) error {
 		self.migrator.LockTimeout = time.Until(ctxDeadline)
 	}
 
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		err := func() error {
 			currentSchemaVersion, bad, err := self.migrator.Version() // nolint
 			if err != nil && err != migrate.ErrNilVersion {
@@ -161,7 +161,7 @@ func (self *Migrator) Assert(ctx context.Context, schemaVersion int) error {
 	switch {
 	case err == nil:
 		return nil
-	case ErrDeadlineExceeded().Is(err):
+	case util.ErrDeadlineExceeded.Is(err):
 		return ErrMigratorTimedOut()
 	default:
 		return ErrMigratorGeneric().Wrap(err)
@@ -176,7 +176,7 @@ func (self *Migrator) Apply(ctx context.Context, schemaVersion int) error {
 		self.migrator.LockTimeout = time.Until(ctxDeadline)
 	}
 
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		err := func() error {
 			currentSchemaVersion, bad, err := self.migrator.Version() // nolint
 			if err != nil && err != migrate.ErrNilVersion {
@@ -223,7 +223,7 @@ func (self *Migrator) Apply(ctx context.Context, schemaVersion int) error {
 	switch {
 	case err == nil:
 		return nil
-	case ErrDeadlineExceeded().Is(err):
+	case util.ErrDeadlineExceeded.Is(err):
 		return ErrMigratorTimedOut()
 	default:
 		return ErrMigratorGeneric().Wrap(err)
@@ -238,7 +238,7 @@ func (self *Migrator) Rollback(ctx context.Context, schemaVersion int) error {
 		self.migrator.LockTimeout = time.Until(ctxDeadline)
 	}
 
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		err := func() error {
 			currentSchemaVersion, bad, err := self.migrator.Version() // nolint
 			if err != nil {
@@ -290,7 +290,7 @@ func (self *Migrator) Rollback(ctx context.Context, schemaVersion int) error {
 	switch {
 	case err == nil:
 		return nil
-	case ErrDeadlineExceeded().Is(err):
+	case util.ErrDeadlineExceeded.Is(err):
 		return ErrMigratorTimedOut()
 	default:
 		return ErrMigratorGeneric().Wrap(err)
@@ -298,7 +298,7 @@ func (self *Migrator) Rollback(ctx context.Context, schemaVersion int) error {
 }
 
 func (self *Migrator) Close(ctx context.Context) error {
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		self.observer.Info(ctx, "Closing migrator")
 
 		select {
@@ -313,9 +313,13 @@ func (self *Migrator) Close(ctx context.Context) error {
 			errD = nil
 		}
 
-		err = Utils.CombineErrors(err, errD)
+		// TODO: Combine errors or improve
 		if err != nil {
 			return ErrMigratorGeneric().WrapAs(err)
+		}
+
+		if errD != nil {
+			return ErrMigratorGeneric().WrapAs(errD)
 		}
 
 		self.observer.Info(ctx, "Closed migrator")
@@ -325,7 +329,7 @@ func (self *Migrator) Close(ctx context.Context) error {
 	switch {
 	case err == nil:
 		return nil
-	case ErrDeadlineExceeded().Is(err):
+	case util.ErrDeadlineExceeded.Is(err):
 		return ErrMigratorTimedOut()
 	default:
 		return ErrMigratorGeneric().Wrap(err)

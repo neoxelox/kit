@@ -2,6 +2,7 @@ package kit
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"runtime"
@@ -12,24 +13,21 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/neoxelox/gilk"
 	"github.com/rs/xid"
-)
 
-// TODO: fix caller func name ".func1"?
-// TODO: fix unnamed Sentry spans
-// TODO: fix path params in transaction names (see observer middleware patch)
-// TODO: add NewRelic for APM and events
-// TODO: add OpenTelemetry for tracing instead of Sentry/NewRelic?
+	"github.com/neoxelox/kit/util"
+)
 
 const (
 	_OBSERVER_REQUEST_TRACE_ID_HEADER = "X-Trace-Id"
+	_OBSERVER_TASK_TRACE_ID_HEADER    = "x_trace_id"
 	_OBSERVER_SENTRY_TRACE_ID_TAG     = "trace_id"
+	_OBSERVER_SENTRY_FLUSH_TIMEOUT    = 5 * time.Second
 )
 
 var (
-	_OBSERVER_DEFAULT_RETRY_ATTEMPTS       = 1
-	_OBSERVER_DEFAULT_RETRY_INITIAL_DELAY  = 0 * time.Second
-	_OBSERVER_DEFAULT_RETRY_LIMIT_DELAY    = 0 * time.Second
-	_OBSERVER_DEFAULT_SENTRY_FLUSH_TIMEOUT = 2 * time.Second
+	_OBSERVER_DEFAULT_RETRY_ATTEMPTS      = 1
+	_OBSERVER_DEFAULT_RETRY_INITIAL_DELAY = 0 * time.Second
+	_OBSERVER_DEFAULT_RETRY_LIMIT_DELAY   = 0 * time.Second
 )
 
 type ObserverRetryConfig struct {
@@ -72,26 +70,27 @@ func NewObserver(ctx context.Context, config ObserverConfig, retry *ObserverRetr
 	logger := NewLogger(LoggerConfig{
 		AppName:        config.AppName,
 		Level:          config.Level,
-		SkipFrameCount: ptr(2),
+		SkipFrameCount: util.Pointer(2),
 	})
 
 	if config.SentryConfig != nil {
-		// TODO: only retry on specific errors
-		err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
-			return Utils.ExponentialRetry(
+		err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
+			return util.ExponentialRetry(
 				retry.Attempts, retry.InitialDelay, retry.LimitDelay,
-				nil, func(attempt int) error {
+				[]error{}, func(attempt int) error {
 					logger.Infof("Trying to connect to the Sentry service %d/%d", attempt, retry.Attempts)
 
 					err := sentry.Init(sentry.ClientOptions{
-						Dsn:              config.SentryConfig.Dsn,
-						Environment:      string(config.Environment),
-						Release:          config.Release,
-						ServerName:       config.AppName,
-						Debug:            false,
-						AttachStacktrace: false, // Already done by errors package
-						SampleRate:       1.0,   // Error events
-						TracesSampleRate: 0.2,   // Transaction events
+						Dsn:                config.SentryConfig.Dsn,
+						Environment:        string(config.Environment),
+						Release:            config.Release,
+						ServerName:         config.AppName,
+						Debug:              false,
+						AttachStacktrace:   false, // Already done by errors package
+						EnableTracing:      true,
+						SampleRate:         1.0,  // Error events
+						TracesSampleRate:   0.25, // Transaction events
+						ProfilesSampleRate: 1.0,  // Profiling events out of Transaction events
 					})
 					if err != nil {
 						return ErrObserverGeneric().WrapAs(err)
@@ -102,7 +101,7 @@ func NewObserver(ctx context.Context, config ObserverConfig, retry *ObserverRetr
 		})
 		switch {
 		case err == nil:
-		case ErrDeadlineExceeded().Is(err):
+		case util.ErrDeadlineExceeded.Is(err):
 			return nil, ErrObserverTimedOut()
 		default:
 			return nil, ErrObserverGeneric().Wrap(err)
@@ -202,6 +201,7 @@ func (self Observer) sendErrToSentry(ctx context.Context, i ...any) {
 		return
 	}
 
+	// TODO: Not needed with new errors package
 	var sentryEvent *sentry.Event
 	var sentryEventExtra map[string]any
 
@@ -224,7 +224,7 @@ func (self Observer) sendErrToSentry(ctx context.Context, i ...any) {
 
 	sentryEvent.Level = sentry.LevelError
 
-	// TODO: enhance exception message and title
+	// TODO: enhance exception message and title <--- NOT NEEDED WITH NEW ERROS PACKAGE
 
 	sentryHub := sentry.GetHubFromContext(ctx)
 	if sentryHub == nil {
@@ -336,20 +336,16 @@ func (self Observer) WithLevelf(ctx context.Context, level Level, format string,
 	}
 }
 
-// TODO
-func (self Observer) Metric() {
-}
-
-func (self Observer) SetTrace(ctx context.Context, traceID xid.ID) context.Context {
+func (self Observer) SetTrace(ctx context.Context, traceID string) context.Context {
 	return context.WithValue(ctx, KeyTraceID, traceID)
 }
 
-func (self Observer) GetTrace(ctx context.Context) xid.ID {
-	if ctxTraceID, ok := ctx.Value(KeyTraceID).(xid.ID); ok {
+func (self Observer) GetTrace(ctx context.Context) string {
+	if ctxTraceID, ok := ctx.Value(KeyTraceID).(string); ok {
 		return ctxTraceID
 	}
 
-	return xid.New()
+	return xid.New().String()
 }
 
 func (self Observer) TraceSpan(ctx context.Context, name ...string) (context.Context, func()) {
@@ -357,27 +353,25 @@ func (self Observer) TraceSpan(ctx context.Context, name ...string) (context.Con
 	ctx = self.SetTrace(ctx, traceID)
 
 	pc, _, _, _ := runtime.Caller(1)
-	caller := runtime.FuncForPC(pc).Name()
-	spanName := caller
-	if len(name) > 0 { // nolint
-		spanName = name[0]
-	}
+	spanName := util.Optional(name, runtime.FuncForPC(pc).Name())
 
 	var sentrySpan *sentry.Span
-	if self.config.SentryConfig != nil { // nolint
+	if self.config.SentryConfig != nil {
 		sentryHub := sentry.GetHubFromContext(ctx)
 		if sentryHub == nil {
 			sentryHub = sentry.CurrentHub().Clone()
+			ctx = sentry.SetHubOnContext(ctx, sentryHub)
 		}
 
-		sentryHub.Scope().SetTag(_OBSERVER_SENTRY_TRACE_ID_TAG, traceID.String())
-		if sentryHub.Scope().Transaction() == "" { // nolint
-			sentryHub.Scope().SetTransaction(caller)
+		sentryHub.Scope().SetTag(_OBSERVER_SENTRY_TRACE_ID_TAG, traceID)
+
+		if sentry.TransactionFromContext(ctx) == nil {
+			sentrySpan = sentry.StartTransaction(
+				ctx, spanName, sentry.WithOpName(spanName), sentry.WithTransactionSource(sentry.SourceComponent))
+		} else {
+			sentrySpan = sentry.StartSpan(ctx, spanName)
 		}
 
-		ctx = sentry.SetHubOnContext(ctx, sentryHub)
-
-		sentrySpan = sentry.StartSpan(ctx, spanName)
 		ctx = sentrySpan.Context()
 	}
 
@@ -390,38 +384,44 @@ func (self Observer) TraceSpan(ctx context.Context, name ...string) (context.Con
 
 func (self Observer) TraceRequest(ctx context.Context, request *http.Request) (context.Context, func()) {
 	traceID := self.GetTrace(ctx)
-	traceIDRaw := request.Header.Get(_OBSERVER_REQUEST_TRACE_ID_HEADER)
-	if traceIDRaw != "" { // nolint
-		traceID, _ = xid.FromString(traceIDRaw) // nolint
+	if request.Header.Get(_OBSERVER_REQUEST_TRACE_ID_HEADER) != "" {
+		traceID = request.Header.Get(_OBSERVER_REQUEST_TRACE_ID_HEADER)
 	}
 	ctx = self.SetTrace(ctx, traceID)
 
-	spanName := request.RequestURI
+	spanName := fmt.Sprintf("%s %s", request.Method, request.RequestURI)
 
 	var endGilkRequest func()
-	if self.config.GilkConfig != nil { // nolint
+	if self.config.GilkConfig != nil {
 		ctx, endGilkRequest = gilk.NewContext(ctx, request.RequestURI, request.Method)
 	}
 
 	var sentrySpan *sentry.Span
-	if self.config.SentryConfig != nil { // nolint
+	if self.config.SentryConfig != nil {
+		sentryTrace := ""
+		if request.Header.Get(sentry.SentryTraceHeader) != "" {
+			sentryTrace = request.Header.Get(sentry.SentryTraceHeader)
+		}
+
 		sentryHub := sentry.GetHubFromContext(ctx)
 		if sentryHub == nil {
 			sentryHub = sentry.CurrentHub().Clone()
+			ctx = sentry.SetHubOnContext(ctx, sentryHub)
 		}
 
 		sentryHub.Scope().SetRequest(request)
 		sentryHub.Scope().SetUser(sentry.User{
 			IPAddress: request.RemoteAddr,
 		})
-		sentryHub.Scope().SetTag(_OBSERVER_SENTRY_TRACE_ID_TAG, traceID.String())
-		if sentryHub.Scope().Transaction() == "" { // nolint
-			sentryHub.Scope().SetTransaction(spanName)
+		sentryHub.Scope().SetTag(_OBSERVER_SENTRY_TRACE_ID_TAG, traceID)
+
+		if sentry.TransactionFromContext(ctx) == nil {
+			sentrySpan = sentry.StartTransaction(ctx, spanName, sentry.WithOpName(spanName),
+				sentry.WithTransactionSource(sentry.SourceURL), sentry.ContinueFromTrace(sentryTrace))
+		} else {
+			sentrySpan = sentry.StartSpan(ctx, spanName, sentry.ContinueFromTrace(sentryTrace))
 		}
 
-		ctx = sentry.SetHubOnContext(ctx, sentryHub)
-
-		sentrySpan = sentry.StartSpan(ctx, spanName, sentry.ContinueFromRequest(request))
 		ctx = sentrySpan.Context()
 	}
 
@@ -442,33 +442,33 @@ func (self Observer) TraceQuery(ctx context.Context, sql string, args ...any) (c
 
 	// Skip 2 dataframes when using observer in database wrapper, otherwise 1
 	pc, _, _, _ := runtime.Caller(2)
-	caller := runtime.FuncForPC(pc).Name()
-	spanName := caller
+	spanName := runtime.FuncForPC(pc).Name()
 
 	var endGilkQuery func()
-	if self.config.GilkConfig != nil { // nolint
+	if self.config.GilkConfig != nil {
 		dArgs := make([]any, len(args))
-
 		copy(dArgs, args)
 
 		ctx, endGilkQuery = gilk.NewQuery(ctx, sql, dArgs...)
 	}
 
 	var sentrySpan *sentry.Span
-	if self.config.SentryConfig != nil { // nolint
+	if self.config.SentryConfig != nil {
 		sentryHub := sentry.GetHubFromContext(ctx)
 		if sentryHub == nil {
 			sentryHub = sentry.CurrentHub().Clone()
+			ctx = sentry.SetHubOnContext(ctx, sentryHub)
 		}
 
-		sentryHub.Scope().SetTag(_OBSERVER_SENTRY_TRACE_ID_TAG, traceID.String())
-		if sentryHub.Scope().Transaction() == "" { // nolint
-			sentryHub.Scope().SetTransaction(caller)
+		sentryHub.Scope().SetTag(_OBSERVER_SENTRY_TRACE_ID_TAG, traceID)
+
+		if sentry.TransactionFromContext(ctx) == nil {
+			sentrySpan = sentry.StartTransaction(
+				ctx, spanName, sentry.WithOpName(spanName), sentry.WithTransactionSource(sentry.SourceComponent))
+		} else {
+			sentrySpan = sentry.StartSpan(ctx, spanName)
 		}
 
-		ctx = sentry.SetHubOnContext(ctx, sentryHub)
-
-		sentrySpan = sentry.StartSpan(ctx, spanName)
 		ctx = sentrySpan.Context()
 	}
 
@@ -485,25 +485,37 @@ func (self Observer) TraceQuery(ctx context.Context, sql string, args ...any) (c
 
 func (self Observer) TraceTask(ctx context.Context, task *asynq.Task) (context.Context, func()) {
 	traceID := self.GetTrace(ctx)
+	var data map[string]any
+	_ = json.Unmarshal(task.Payload(), &data)
+	if data[_OBSERVER_TASK_TRACE_ID_HEADER] != nil {
+		traceID = data[_OBSERVER_TASK_TRACE_ID_HEADER].(string)
+	}
 	ctx = self.SetTrace(ctx, traceID)
 
 	spanName := task.Type()
 
 	var sentrySpan *sentry.Span
-	if self.config.SentryConfig != nil { // nolint
+	if self.config.SentryConfig != nil {
+		sentryTrace := ""
+		if data[sentry.SentryTraceHeader] != nil {
+			sentryTrace = data[sentry.SentryTraceHeader].(string)
+		}
+
 		sentryHub := sentry.GetHubFromContext(ctx)
 		if sentryHub == nil {
 			sentryHub = sentry.CurrentHub().Clone()
+			ctx = sentry.SetHubOnContext(ctx, sentryHub)
 		}
 
-		sentryHub.Scope().SetTag(_OBSERVER_SENTRY_TRACE_ID_TAG, traceID.String())
-		if sentryHub.Scope().Transaction() == "" { // nolint
-			sentryHub.Scope().SetTransaction(spanName)
+		sentryHub.Scope().SetTag(_OBSERVER_SENTRY_TRACE_ID_TAG, traceID)
+
+		if sentry.TransactionFromContext(ctx) == nil {
+			sentrySpan = sentry.StartTransaction(ctx, spanName, sentry.WithOpName(spanName),
+				sentry.WithTransactionSource(sentry.SourceTask), sentry.ContinueFromTrace(sentryTrace))
+		} else {
+			sentrySpan = sentry.StartSpan(ctx, spanName, sentry.ContinueFromTrace(sentryTrace))
 		}
 
-		ctx = sentry.SetHubOnContext(ctx, sentryHub)
-
-		sentrySpan = sentry.StartSpan(ctx, spanName)
 		ctx = sentrySpan.Context()
 	}
 
@@ -515,14 +527,14 @@ func (self Observer) TraceTask(ctx context.Context, task *asynq.Task) (context.C
 }
 
 func (self Observer) Flush(ctx context.Context) error {
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		err := self.Logger.Flush(ctx)
 		if err != nil {
 			return ErrObserverGeneric().WrapAs(err)
 		}
 
 		if self.config.SentryConfig != nil {
-			sentryFlushTimeout := _OBSERVER_DEFAULT_SENTRY_FLUSH_TIMEOUT
+			sentryFlushTimeout := _OBSERVER_SENTRY_FLUSH_TIMEOUT
 			if ctxDeadline, ok := ctx.Deadline(); ok {
 				sentryFlushTimeout = time.Until(ctxDeadline)
 			}
@@ -542,7 +554,7 @@ func (self Observer) Flush(ctx context.Context) error {
 	switch {
 	case err == nil:
 		return nil
-	case ErrDeadlineExceeded().Is(err):
+	case util.ErrDeadlineExceeded.Is(err):
 		return ErrObserverTimedOut()
 	default:
 		return ErrObserverGeneric().Wrap(err)
@@ -550,7 +562,7 @@ func (self Observer) Flush(ctx context.Context) error {
 }
 
 func (self Observer) Close(ctx context.Context) error {
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		self.Logger.Info("Closing observer")
 
 		err := self.Flush(ctx)
@@ -582,7 +594,7 @@ func (self Observer) Close(ctx context.Context) error {
 	switch {
 	case err == nil:
 		return nil
-	case ErrDeadlineExceeded().Is(err):
+	case util.ErrDeadlineExceeded.Is(err):
 		return ErrObserverTimedOut()
 	default:
 		return ErrObserverGeneric().Wrap(err)

@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/leporo/sqlf"
+	"github.com/neoxelox/kit/util"
 	"github.com/randallmlough/pgxscan"
 )
 
@@ -70,19 +71,19 @@ type Database struct {
 func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig,
 	retry *DatabaseRetryConfig) (*Database, error) {
 	if config.DatabaseMinConns == nil {
-		config.DatabaseMinConns = ptr(_DATABASE_DEFAULT_MIN_CONNS)
+		config.DatabaseMinConns = util.Pointer(_DATABASE_DEFAULT_MIN_CONNS)
 	}
 
 	if config.DatabaseMaxConns == nil {
-		config.DatabaseMaxConns = ptr(_DATABASE_DEFAULT_MAX_CONNS)
+		config.DatabaseMaxConns = util.Pointer(_DATABASE_DEFAULT_MAX_CONNS)
 	}
 
 	if config.DatabaseMaxConnIdleTime == nil {
-		config.DatabaseMaxConnIdleTime = ptr(_DATABASE_DEFAULT_MAX_CONN_IDLE_TIME)
+		config.DatabaseMaxConnIdleTime = util.Pointer(_DATABASE_DEFAULT_MAX_CONN_IDLE_TIME)
 	}
 
 	if config.DatabaseMaxConnLifeTime == nil {
-		config.DatabaseMaxConnLifeTime = ptr(_DATABASE_DEFAULT_MAX_CONN_LIFE_TIME)
+		config.DatabaseMaxConnLifeTime = util.Pointer(_DATABASE_DEFAULT_MAX_CONN_LIFE_TIME)
 	}
 
 	if retry == nil {
@@ -128,11 +129,10 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig,
 
 	var pool *pgxpool.Pool
 
-	// TODO: only retry on specific errors
-	err = Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
-		return Utils.ExponentialRetry(
+	err = util.Deadline(ctx, func(exceeded <-chan struct{}) error {
+		return util.ExponentialRetry(
 			retry.Attempts, retry.InitialDelay, retry.LimitDelay,
-			nil, func(attempt int) error {
+			[]error{}, func(attempt int) error {
 				var err error // nolint
 
 				observer.Infof(ctx, "Trying to connect to the %s database %d/%d",
@@ -153,7 +153,7 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig,
 	})
 	switch {
 	case err == nil:
-	case ErrDeadlineExceeded().Is(err):
+	case util.ErrDeadlineExceeded.Is(err):
 		return nil, ErrDatabaseTimedOut()
 	default:
 		return nil, ErrDatabaseGeneric().Wrap(err)
@@ -171,7 +171,7 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig,
 }
 
 func (self *Database) Health(ctx context.Context) error {
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		currentConns := self.pool.Stat().TotalConns()
 		if currentConns < int32(*self.config.DatabaseMinConns) {
 			return ErrDatabaseUnhealthy().Withf("current conns %d below minimum %d",
@@ -193,7 +193,7 @@ func (self *Database) Health(ctx context.Context) error {
 	switch {
 	case err == nil:
 		return nil
-	case ErrDeadlineExceeded().Is(err):
+	case util.ErrDeadlineExceeded.Is(err):
 		return ErrDatabaseTimedOut()
 	default:
 		return ErrDatabaseGeneric().Wrap(err)
@@ -314,40 +314,40 @@ func (self *Database) Transaction(ctx context.Context, fn func(ctx context.Conte
 	defer func() {
 		err := recover()
 		if err != nil {
-			errR := transaction.Rollback(ctx)
-			panic(Utils.CombineErrors(err.(error), errR)) // nolint
+			_ = transaction.Rollback(ctx) // TODO: Combine error
+			panic(err)
 		}
 	}()
 
 	err = fn(context.WithValue(ctx, KeyDatabaseTransaction, transaction))
 	if err != nil {
-		errR := transaction.Rollback(ctx)
-		return ErrDatabaseTransactionFailed().Wrap(Utils.CombineErrors(err, errR))
+		_ = transaction.Rollback(ctx) // TODO: Combine error
+		return ErrDatabaseTransactionFailed().Wrap(err)
 	}
 
 	err = ctx.Err()
 	if err != nil {
-		errR := transaction.Rollback(ctx)
-		return ErrDatabaseTransactionFailed().Wrap(Utils.CombineErrors(err, errR))
+		_ = transaction.Rollback(ctx) // TODO: Combine error
+		return ErrDatabaseTransactionFailed().Wrap(err)
 	}
 
 	err = transaction.Commit(ctx)
 	if err != nil {
-		errR := transaction.Rollback(ctx)
-		return ErrDatabaseTransactionFailed().Wrap(Utils.CombineErrors(err, errR))
+		_ = transaction.Rollback(ctx) // TODO: Combine error
+		return ErrDatabaseTransactionFailed().Wrap(err)
 	}
 
 	err = ctx.Err()
 	if err != nil {
-		errR := transaction.Rollback(ctx)
-		return ErrDatabaseTransactionFailed().Wrap(Utils.CombineErrors(err, errR))
+		_ = transaction.Rollback(ctx) // TODO: Combine error
+		return ErrDatabaseTransactionFailed().Wrap(err)
 	}
 
 	return nil
 }
 
 func (self *Database) Close(ctx context.Context) error {
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		self.observer.Infof(ctx, "Closing %s database", self.config.DatabaseName)
 
 		self.pool.Close()
@@ -359,7 +359,7 @@ func (self *Database) Close(ctx context.Context) error {
 	switch {
 	case err == nil:
 		return nil
-	case ErrDeadlineExceeded().Is(err):
+	case util.ErrDeadlineExceeded.Is(err):
 		return ErrDatabaseTimedOut()
 	default:
 		return ErrDatabaseGeneric().Wrap(err)

@@ -1,12 +1,14 @@
 module github.com/neoxelox/kit
 
-go 1.21
+go 1.21.1
+
+toolchain go1.21.5
 
 require (
 	github.com/aodin/date v0.0.0-20160219192542-c5f6146fc644
 	github.com/cockroachdb/errors v1.11.1
 	github.com/eapache/go-resiliency v1.4.0
-	github.com/getsentry/sentry-go v0.19.0
+	github.com/getsentry/sentry-go v0.25.0
 	github.com/go-redis/cache/v8 v8.4.4
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/golang-migrate/migrate/v4 v4.16.2
@@ -18,6 +20,7 @@ require (
 	github.com/jackc/pgx/v4 v4.18.1
 	github.com/labstack/echo/v4 v4.11.1
 	github.com/leporo/sqlf v1.4.0
+	github.com/neoxelox/errors v0.2.0
 	github.com/neoxelox/gilk v0.5.0
 	github.com/randallmlough/pgxscan v0.3.0
 	github.com/rs/xid v1.5.0

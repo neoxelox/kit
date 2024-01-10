@@ -8,11 +8,14 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/hibiken/asynq"
+	"github.com/neoxelox/kit/util"
 )
 
 const (
-	_ENQUEUER_REDIS_DSN = "%s:%d"
+	_ENQUEUER_REDIS_DSN            = "%s:%d"
+	_ENQUEUER_TASK_TRACE_ID_HEADER = "x_trace_id"
 )
 
 var (
@@ -41,19 +44,19 @@ type Enqueuer struct {
 
 func NewEnqueuer(observer Observer, config EnqueuerConfig) *Enqueuer {
 	if config.CacheMaxConns == nil {
-		config.CacheMaxConns = ptr(_ENQUEUER_DEFAULT_MAX_CONNS)
+		config.CacheMaxConns = util.Pointer(_ENQUEUER_DEFAULT_MAX_CONNS)
 	}
 
 	if config.CacheReadTimeout == nil {
-		config.CacheReadTimeout = ptr(_ENQUEUER_DEFAULT_READ_TIMEOUT)
+		config.CacheReadTimeout = util.Pointer(_ENQUEUER_DEFAULT_READ_TIMEOUT)
 	}
 
 	if config.CacheWriteTimeout == nil {
-		config.CacheWriteTimeout = ptr(_ENQUEUER_DEFAULT_WRITE_TIMEOUT)
+		config.CacheWriteTimeout = util.Pointer(_ENQUEUER_DEFAULT_WRITE_TIMEOUT)
 	}
 
 	if config.CacheDialTimeout == nil {
-		config.CacheDialTimeout = ptr(_ENQUEUER_DEFAULT_DIAL_TIMEOUT)
+		config.CacheDialTimeout = util.Pointer(_ENQUEUER_DEFAULT_DIAL_TIMEOUT)
 	}
 
 	dsn := fmt.Sprintf(_ENQUEUER_REDIS_DSN, config.CacheHost, config.CachePort)
@@ -83,7 +86,27 @@ func NewEnqueuer(observer Observer, config EnqueuerConfig) *Enqueuer {
 }
 
 func (self *Enqueuer) Enqueue(ctx context.Context, task string, params any, options ...asynq.Option) error {
+	traceID := self.observer.GetTrace(ctx)
+	sentrySpan := sentry.SpanFromContext(ctx)
+
 	payload, err := json.Marshal(params)
+	if err != nil {
+		return ErrEnqueuerGeneric().Wrap(err)
+	}
+
+	var data map[string]any
+
+	err = json.Unmarshal(payload, &data)
+	if err != nil {
+		return ErrEnqueuerGeneric().Wrap(err)
+	}
+
+	data[_ENQUEUER_TASK_TRACE_ID_HEADER] = traceID
+	if sentrySpan != nil {
+		data[sentry.SentryTraceHeader] = sentrySpan.ToSentryTrace()
+	}
+
+	payload, err = json.Marshal(data)
 	if err != nil {
 		return ErrEnqueuerGeneric().Wrap(err)
 	}
@@ -93,13 +116,14 @@ func (self *Enqueuer) Enqueue(ctx context.Context, task string, params any, opti
 		return ErrEnqueuerGeneric().Wrap(err)
 	}
 
-	self.observer.Infof(ctx, "Enqueued task %s on queue %s with id %s", info.Type, info.Queue, info.ID)
+	self.observer.Infof(
+		ctx, "Enqueued task %s on queue %s with id %s and trace %s", info.Type, info.Queue, info.ID, traceID)
 
 	return nil
 }
 
 func (self *Enqueuer) Close(ctx context.Context) error {
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		self.observer.Info(ctx, "Closing enqueuer")
 
 		err := self.client.Close()
@@ -114,7 +138,7 @@ func (self *Enqueuer) Close(ctx context.Context) error {
 	switch {
 	case err == nil:
 		return nil
-	case ErrDeadlineExceeded().Is(err):
+	case util.ErrDeadlineExceeded.Is(err):
 		return ErrEnqueuerTimedOut()
 	default:
 		return ErrEnqueuerGeneric().Wrap(err)

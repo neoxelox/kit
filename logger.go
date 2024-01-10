@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/neoxelox/kit/util"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/diode"
 )
@@ -59,7 +60,7 @@ func NewLogger(config LoggerConfig) *Logger {
 	zerolog.CallerFieldName = _LOGGER_CALLER_FIELD_NAME
 
 	if config.SkipFrameCount == nil {
-		config.SkipFrameCount = ptr(_LOGGER_DEFAULT_SKIP_FRAME_COUNT)
+		config.SkipFrameCount = util.Pointer(_LOGGER_DEFAULT_SKIP_FRAME_COUNT)
 	}
 
 	_, file, line, _ := runtime.Caller(0)
@@ -96,7 +97,7 @@ func (self Logger) Logger() *zerolog.Logger {
 }
 
 func (self Logger) Flush(ctx context.Context) error {
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		time.Sleep(_LOGGER_FLUSH_DELAY)
 		os.Stdout.Sync()
 		os.Stderr.Sync()
@@ -106,7 +107,7 @@ func (self Logger) Flush(ctx context.Context) error {
 	switch {
 	case err == nil:
 		return nil
-	case ErrDeadlineExceeded().Is(err):
+	case util.ErrDeadlineExceeded.Is(err):
 		return ErrLoggerTimedOut()
 	default:
 		return ErrLoggerGeneric().Wrap(err)
@@ -114,7 +115,7 @@ func (self Logger) Flush(ctx context.Context) error {
 }
 
 func (self Logger) Close(ctx context.Context) error {
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		self.Info("Closing logger")
 
 		err := self.Flush(ctx)
@@ -139,7 +140,7 @@ func (self Logger) Close(ctx context.Context) error {
 	switch {
 	case err == nil:
 		return nil
-	case ErrDeadlineExceeded().Is(err):
+	case util.ErrDeadlineExceeded.Is(err):
 		return ErrLoggerTimedOut()
 	default:
 		return ErrLoggerGeneric().Wrap(err)

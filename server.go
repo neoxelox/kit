@@ -9,6 +9,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	echoMiddleware "github.com/labstack/echo/v4/middleware"
+	"github.com/neoxelox/kit/util"
 )
 
 var (
@@ -44,35 +45,35 @@ type Server struct {
 func NewServer(observer Observer, serializer Serializer, binder Binder,
 	renderer Renderer, exceptionHandler ExceptionHandler, config ServerConfig) *Server {
 	if config.RequestHeaderMaxSize == nil {
-		config.RequestHeaderMaxSize = ptr(_SERVER_DEFAULT_REQUEST_HEADER_MAX_SIZE)
+		config.RequestHeaderMaxSize = util.Pointer(_SERVER_DEFAULT_REQUEST_HEADER_MAX_SIZE)
 	}
 
 	if config.RequestBodyMaxSize == nil {
-		config.RequestBodyMaxSize = ptr(_SERVER_DEFAULT_REQUEST_BODY_MAX_SIZE)
+		config.RequestBodyMaxSize = util.Pointer(_SERVER_DEFAULT_REQUEST_BODY_MAX_SIZE)
 	}
 
 	if config.RequestFileMaxSize == nil {
-		config.RequestFileMaxSize = ptr(_SERVER_DEFAULT_REQUEST_FILE_MAX_SIZE)
+		config.RequestFileMaxSize = util.Pointer(_SERVER_DEFAULT_REQUEST_FILE_MAX_SIZE)
 	}
 
 	if config.RequestKeepAliveTimeout == nil {
-		config.RequestKeepAliveTimeout = ptr(_SERVER_DEFAULT_REQUEST_KEEP_ALIVE_TIMEOUT)
+		config.RequestKeepAliveTimeout = util.Pointer(_SERVER_DEFAULT_REQUEST_KEEP_ALIVE_TIMEOUT)
 	}
 
 	if config.RequestReadTimeout == nil {
-		config.RequestReadTimeout = ptr(_SERVER_DEFAULT_REQUEST_READ_TIMEOUT)
+		config.RequestReadTimeout = util.Pointer(_SERVER_DEFAULT_REQUEST_READ_TIMEOUT)
 	}
 
 	if config.RequestReadHeaderTimeout == nil {
-		config.RequestReadHeaderTimeout = ptr(_SERVER_DEFAULT_REQUEST_READ_HEADER_TIMEOUT)
+		config.RequestReadHeaderTimeout = util.Pointer(_SERVER_DEFAULT_REQUEST_READ_HEADER_TIMEOUT)
 	}
 
 	if config.RequestIPExtractor == nil {
-		config.RequestIPExtractor = ptr(_SERVER_DEFAULT_REQUEST_IP_EXTRACTOR)
+		config.RequestIPExtractor = util.Pointer(_SERVER_DEFAULT_REQUEST_IP_EXTRACTOR)
 	}
 
 	if config.ResponseWriteTimeout == nil {
-		config.ResponseWriteTimeout = ptr(_SERVER_DEFAULT_RESPONSE_WRITE_TIMEOUT)
+		config.ResponseWriteTimeout = util.Pointer(_SERVER_DEFAULT_RESPONSE_WRITE_TIMEOUT)
 	}
 
 	server := echo.New()
@@ -102,10 +103,10 @@ func NewServer(observer Observer, serializer Serializer, binder Binder,
 			// TODO: allow to customize this or provide a built-in system for files?
 			return strings.HasPrefix(ctx.Request().RequestURI, "/file")
 		},
-		Limit: Utils.ByteSize(*config.RequestBodyMaxSize),
+		Limit: util.ByteSize(*config.RequestBodyMaxSize),
 	}))
 	server.Pre(echoMiddleware.BodyLimitWithConfig(echoMiddleware.BodyLimitConfig{
-		Limit: Utils.ByteSize(*config.RequestFileMaxSize),
+		Limit: util.ByteSize(*config.RequestFileMaxSize),
 	}))
 
 	// Pre hook middleware
@@ -147,7 +148,7 @@ func (self *Server) Default(middleware ...echo.MiddlewareFunc) *echo.Group {
 }
 
 func (self *Server) Close(ctx context.Context) error {
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		self.observer.Info(ctx, "Closing server")
 
 		self.server.Server.SetKeepAlivesEnabled(false)
@@ -164,7 +165,7 @@ func (self *Server) Close(ctx context.Context) error {
 	switch {
 	case err == nil:
 		return nil
-	case ErrDeadlineExceeded().Is(err):
+	case util.ErrDeadlineExceeded.Is(err):
 		return ErrServerTimedOut()
 	default:
 		return ErrServerGeneric().Wrap(err)

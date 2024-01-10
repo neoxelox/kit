@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-redis/cache/v8"
 	"github.com/go-redis/redis/v8"
+	"github.com/neoxelox/kit/util"
 )
 
 const (
@@ -65,35 +66,35 @@ type Cache struct {
 
 func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry *CacheRetryConfig) (*Cache, error) {
 	if config.CacheMinConns == nil {
-		config.CacheMinConns = ptr(_CACHE_DEFAULT_MIN_CONNS)
+		config.CacheMinConns = util.Pointer(_CACHE_DEFAULT_MIN_CONNS)
 	}
 
 	if config.CacheMaxConns == nil {
-		config.CacheMaxConns = ptr(_CACHE_DEFAULT_MAX_CONNS)
+		config.CacheMaxConns = util.Pointer(_CACHE_DEFAULT_MAX_CONNS)
 	}
 
 	if config.CacheMaxConnIdleTime == nil {
-		config.CacheMaxConnIdleTime = ptr(_CACHE_DEFAULT_MAX_CONN_IDLE_TIME)
+		config.CacheMaxConnIdleTime = util.Pointer(_CACHE_DEFAULT_MAX_CONN_IDLE_TIME)
 	}
 
 	if config.CacheMaxConnLifeTime == nil {
-		config.CacheMaxConnLifeTime = ptr(_CACHE_DEFAULT_MAX_CONN_LIFE_TIME)
+		config.CacheMaxConnLifeTime = util.Pointer(_CACHE_DEFAULT_MAX_CONN_LIFE_TIME)
 	}
 
 	if config.CacheReadTimeout == nil {
-		config.CacheReadTimeout = ptr(_CACHE_DEFAULT_READ_TIMEOUT)
+		config.CacheReadTimeout = util.Pointer(_CACHE_DEFAULT_READ_TIMEOUT)
 	}
 
 	if config.CacheWriteTimeout == nil {
-		config.CacheWriteTimeout = ptr(_CACHE_DEFAULT_WRITE_TIMEOUT)
+		config.CacheWriteTimeout = util.Pointer(_CACHE_DEFAULT_WRITE_TIMEOUT)
 	}
 
 	if config.CacheDialTimeout == nil {
-		config.CacheDialTimeout = ptr(_CACHE_DEFAULT_DIAL_TIMEOUT)
+		config.CacheDialTimeout = util.Pointer(_CACHE_DEFAULT_DIAL_TIMEOUT)
 	}
 
 	if config.CacheAcquireTimeout == nil {
-		config.CacheAcquireTimeout = ptr(_CACHE_DEFAULT_ACQUIRE_TIMEOUT)
+		config.CacheAcquireTimeout = util.Pointer(_CACHE_DEFAULT_ACQUIRE_TIMEOUT)
 	}
 
 	if retry == nil {
@@ -136,11 +137,10 @@ func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry 
 
 	var pool *redis.Client
 
-	// TODO: only retry on specific errors
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
-		return Utils.ExponentialRetry(
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
+		return util.ExponentialRetry(
 			retry.Attempts, retry.InitialDelay, retry.LimitDelay,
-			nil, func(attempt int) error {
+			[]error{}, func(attempt int) error {
 				var err error // nolint
 
 				observer.Infof(ctx, "Trying to connect to the cache %d/%d", attempt, retry.Attempts)
@@ -157,7 +157,7 @@ func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry 
 	})
 	switch {
 	case err == nil:
-	case ErrDeadlineExceeded().Is(err):
+	case util.ErrDeadlineExceeded.Is(err):
 		return nil, ErrCacheTimedOut()
 	default:
 		return nil, ErrCacheGeneric().Wrap(err)
@@ -180,7 +180,7 @@ func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry 
 }
 
 func (self *Cache) Health(ctx context.Context) error {
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		currentConns := self.pool.PoolStats().TotalConns
 		if currentConns < uint32(*self.config.CacheMinConns) {
 			return ErrCacheUnhealthy().Withf("current conns %d below minimum %d",
@@ -202,7 +202,7 @@ func (self *Cache) Health(ctx context.Context) error {
 	switch {
 	case err == nil:
 		return nil
-	case ErrDeadlineExceeded().Is(err):
+	case util.ErrDeadlineExceeded.Is(err):
 		return ErrCacheTimedOut()
 	default:
 		return ErrCacheGeneric().Wrap(err)
@@ -224,7 +224,7 @@ func _chErrToError(err error) *Error {
 
 func (self *Cache) Set(ctx context.Context, key string, value any, ttl *time.Duration) error {
 	if ttl == nil {
-		ttl = ptr(0 * time.Second)
+		ttl = util.Pointer(0 * time.Second)
 	}
 
 	err := self.cache.Set(&cache.Item{
@@ -260,7 +260,7 @@ func (self *Cache) Delete(ctx context.Context, key string) error {
 }
 
 func (self *Cache) Close(ctx context.Context) error {
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		self.observer.Info(ctx, "Closing cache")
 
 		err := self.pool.Close()
@@ -275,7 +275,7 @@ func (self *Cache) Close(ctx context.Context) error {
 	switch {
 	case err == nil:
 		return nil
-	case ErrDeadlineExceeded().Is(err):
+	case util.ErrDeadlineExceeded.Is(err):
 		return ErrCacheTimedOut()
 	default:
 		return ErrCacheGeneric().Wrap(err)
