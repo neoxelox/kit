@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"dario.cat/mergo"
 	"github.com/aodin/date"
 	"github.com/eapache/go-resiliency/deadline"
 	"github.com/eapache/go-resiliency/retrier"
@@ -122,9 +123,12 @@ func Optional[T any](param []T, def T) T {
 
 func Deadline(ctx context.Context, fn func(exceeded <-chan struct{}) error) error {
 	if ctxDeadline, ok := ctx.Deadline(); ok {
-		err := deadline.New(time.Until(ctxDeadline)).Run(fn)
+		timeout := time.Until(ctxDeadline)
+
+		err := deadline.New(timeout).Run(fn)
 		if err == deadline.ErrTimedOut {
-			err = ErrDeadlineExceeded.Raise().Cause(err)
+			err = ErrDeadlineExceeded.Raise().
+				Extra(map[string]any{"timeout": timeout}).Cause(err)
 		}
 
 		return err
@@ -180,10 +184,17 @@ func ExponentialRetry(attempts int, initialDelay time.Duration, limitDelay time.
 		})
 }
 
-func Copy(src any) any {
-	return copier.Copy(src)
-}
-
 func Equals(first any, second any) bool {
 	return cmp.Equal(first, second)
+}
+
+func Copy[T any](src T) *T {
+	return copier.Copy(&src).(*T)
+}
+
+func Merge[T any](dst *T, src T) {
+	err := mergo.Merge(dst, src)
+	if err != nil {
+		panic(err)
+	}
 }

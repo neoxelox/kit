@@ -10,6 +10,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/hibiken/asynq"
+
 	"github.com/neoxelox/kit/util"
 )
 
@@ -19,10 +20,12 @@ const (
 )
 
 var (
-	_ENQUEUER_DEFAULT_MAX_CONNS     = 10 * runtime.GOMAXPROCS(-1)
-	_ENQUEUER_DEFAULT_READ_TIMEOUT  = 30 * time.Second
-	_ENQUEUER_DEFAULT_WRITE_TIMEOUT = 30 * time.Second
-	_ENQUEUER_DEFAULT_DIAL_TIMEOUT  = 30 * time.Second
+	_ENQUEUER_DEFAULT_CONFIG = EnqueuerConfig{
+		CacheMaxConns:     util.Pointer(10 * runtime.GOMAXPROCS(-1)),
+		CacheReadTimeout:  util.Pointer(30 * time.Second),
+		CacheWriteTimeout: util.Pointer(30 * time.Second),
+		CacheDialTimeout:  util.Pointer(30 * time.Second),
+	}
 )
 
 type EnqueuerConfig struct {
@@ -43,21 +46,7 @@ type Enqueuer struct {
 }
 
 func NewEnqueuer(observer Observer, config EnqueuerConfig) *Enqueuer {
-	if config.CacheMaxConns == nil {
-		config.CacheMaxConns = util.Pointer(_ENQUEUER_DEFAULT_MAX_CONNS)
-	}
-
-	if config.CacheReadTimeout == nil {
-		config.CacheReadTimeout = util.Pointer(_ENQUEUER_DEFAULT_READ_TIMEOUT)
-	}
-
-	if config.CacheWriteTimeout == nil {
-		config.CacheWriteTimeout = util.Pointer(_ENQUEUER_DEFAULT_WRITE_TIMEOUT)
-	}
-
-	if config.CacheDialTimeout == nil {
-		config.CacheDialTimeout = util.Pointer(_ENQUEUER_DEFAULT_DIAL_TIMEOUT)
-	}
+	util.Merge(&config, _ENQUEUER_DEFAULT_CONFIG)
 
 	dsn := fmt.Sprintf(_ENQUEUER_REDIS_DSN, config.CacheHost, config.CachePort)
 

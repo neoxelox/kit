@@ -9,48 +9,51 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/neoxelox/kit/util"
 	"golang.org/x/text/language"
 	"gopkg.in/yaml.v3"
+
+	"github.com/neoxelox/kit/util"
 )
 
 // TODO: enhance localization with go-i18n, go-localize or spreak
 
 var (
-	_LOCALIZER_DEFAULT_LOCALES_PATH      = "./locales"
-	_LOCALIZER_DEFAULT_LOCALE_EXTENSIONS = regexp.MustCompile(`^.*\.(yml|yaml)$`)
+	_LOCALIZER_DEFAULT_CONFIG = LocalizerConfig{
+		LocalesPath:            util.Pointer("./locales"),
+		LocaleExtensionPattern: util.Pointer(`^.*\.(yml|yaml)$`),
+	}
 )
 
 type LocalizerConfig struct {
-	LocalesPath      *string
-	LocaleExtensions *regexp.Regexp
-	DefaultLocale    language.Tag
+	DefaultLocale          language.Tag
+	LocalesPath            *string
+	LocaleExtensionPattern *string
 }
 
 type Localizer struct {
-	config   LocalizerConfig
-	observer Observer
-	copies   *map[language.Tag]map[string]string
+	config     LocalizerConfig
+	observer   Observer
+	copies     *map[language.Tag]map[string]string
+	extensions *regexp.Regexp
 }
 
 func NewLocalizer(observer Observer, config LocalizerConfig) (*Localizer, error) {
-	if config.LocalesPath == nil {
-		config.LocalesPath = util.Pointer(_LOCALIZER_DEFAULT_LOCALES_PATH)
-	}
-
-	config.LocaleExtensions = _LOCALIZER_DEFAULT_LOCALE_EXTENSIONS.Copy()
+	util.Merge(&config, _LOCALIZER_DEFAULT_CONFIG)
 
 	*config.LocalesPath = filepath.Clean(*config.LocalesPath)
 
-	copiesByLang, err := _getCopies(&observer, *config.LocalesPath, config.LocaleExtensions)
+	extensions := regexp.MustCompile(*config.LocaleExtensionPattern)
+
+	copiesByLang, err := _getCopies(&observer, *config.LocalesPath, extensions)
 	if err != nil {
 		return nil, ErrLocalizerGeneric().Wrap(err)
 	}
 
 	return &Localizer{
-		config:   config,
-		observer: observer,
-		copies:   copiesByLang,
+		config:     config,
+		observer:   observer,
+		copies:     copiesByLang,
+		extensions: extensions,
 	}, nil
 }
 
@@ -115,7 +118,7 @@ func _getCopies(
 }
 
 func (self *Localizer) Refresh() error {
-	copiesByLang, err := _getCopies(&self.observer, *self.config.LocalesPath, self.config.LocaleExtensions)
+	copiesByLang, err := _getCopies(&self.observer, *self.config.LocalesPath, self.extensions)
 	if err != nil {
 		return ErrLocalizerGeneric().Wrap(err)
 	}

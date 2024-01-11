@@ -7,14 +7,18 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
-
-	"net/http"
 
 	"github.com/labstack/echo/v4"
 
 	"github.com/neoxelox/kit"
+	"github.com/neoxelox/kit/util"
+)
+
+var (
+	_TIMEOUT_MIDDLEWARE_DEFAULT_CONFIG = TimeoutConfig{}
 )
 
 type TimeoutConfig struct {
@@ -27,6 +31,8 @@ type Timeout struct {
 }
 
 func NewTimeout(observer kit.Observer, config TimeoutConfig) *Timeout {
+	util.Merge(&config, _TIMEOUT_MIDDLEWARE_DEFAULT_CONFIG)
+
 	return &Timeout{
 		config:   config,
 		observer: observer,

@@ -8,22 +8,22 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/neoxelox/kit/util"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/diode"
+
+	"github.com/neoxelox/kit/util"
 )
 
 const (
-	_LOGGER_DEFAULT_SKIP_FRAME_COUNT = 1
-	_LOGGER_LEVEL_FIELD_NAME         = "level"
-	_LOGGER_MESSAGE_FIELD_NAME       = "message"
-	_LOGGER_APP_FIELD_NAME           = "app"
-	_LOGGER_TIMESTAMP_FIELD_NAME     = "timestamp"
-	_LOGGER_TIMESTAMP_FIELD_FORMAT   = zerolog.TimeFormatUnix
-	_LOGGER_CALLER_FIELD_NAME        = "caller"
-	_LOGGER_WRITER_SIZE              = 1000
-	_LOGGER_POLL_INTERVAL            = 10 * time.Millisecond
-	_LOGGER_FLUSH_DELAY              = _LOGGER_POLL_INTERVAL * 10
+	_LOGGER_LEVEL_FIELD_NAME       = "level"
+	_LOGGER_MESSAGE_FIELD_NAME     = "message"
+	_LOGGER_APP_FIELD_NAME         = "app"
+	_LOGGER_TIMESTAMP_FIELD_NAME   = "timestamp"
+	_LOGGER_TIMESTAMP_FIELD_FORMAT = zerolog.TimeFormatUnix
+	_LOGGER_CALLER_FIELD_NAME      = "caller"
+	_LOGGER_WRITER_SIZE            = 1000
+	_LOGGER_POLL_INTERVAL          = 10 * time.Millisecond
+	_LOGGER_FLUSH_DELAY            = _LOGGER_POLL_INTERVAL * 10
 )
 
 var _KlevelToZlevel = map[Level]zerolog.Level{
@@ -34,6 +34,12 @@ var _KlevelToZlevel = map[Level]zerolog.Level{
 	LvlError: zerolog.ErrorLevel,
 	LvlNone:  zerolog.Disabled,
 }
+
+var (
+	_LOGGER_DEFAULT_CONFIG = LoggerConfig{
+		SkipFrameCount: util.Pointer(1),
+	}
+)
 
 type LoggerConfig struct {
 	AppName        string
@@ -53,15 +59,13 @@ type Logger struct {
 }
 
 func NewLogger(config LoggerConfig) *Logger {
+	util.Merge(&config, _LOGGER_DEFAULT_CONFIG)
+
 	zerolog.LevelFieldName = _LOGGER_LEVEL_FIELD_NAME
 	zerolog.MessageFieldName = _LOGGER_MESSAGE_FIELD_NAME
 	zerolog.TimestampFieldName = _LOGGER_TIMESTAMP_FIELD_NAME
 	zerolog.TimeFieldFormat = _LOGGER_TIMESTAMP_FIELD_FORMAT
 	zerolog.CallerFieldName = _LOGGER_CALLER_FIELD_NAME
-
-	if config.SkipFrameCount == nil {
-		config.SkipFrameCount = util.Pointer(_LOGGER_DEFAULT_SKIP_FRAME_COUNT)
-	}
 
 	_, file, line, _ := runtime.Caller(0)
 

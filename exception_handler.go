@@ -4,6 +4,12 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
+
+	"github.com/neoxelox/kit/util"
+)
+
+var (
+	_EXCEPTION_HANDLER_DEFAULT_CONFIG = ExceptionHandlerConfig{}
 )
 
 type ExceptionHandlerConfig struct {
@@ -16,6 +22,8 @@ type ExceptionHandler struct {
 }
 
 func NewExceptionHandler(observer Observer, config ExceptionHandlerConfig) *ExceptionHandler {
+	util.Merge(&config, _EXCEPTION_HANDLER_DEFAULT_CONFIG)
+
 	return &ExceptionHandler{
 		observer: observer,
 		config:   config,

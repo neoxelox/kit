@@ -4,10 +4,15 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/neoxelox/kit"
+	"github.com/neoxelox/kit/util"
 )
 
 // TODO: See how to improve this, as ctx.Error() should be called right after the actual handler
 // (so in theory the ExceptionMiddleware should be the first middleware after the handler)
+
+var (
+	_EXCEPTION_MIDDLEWARE_DEFAULT_CONFIG = ExceptionConfig{}
+)
 
 type ExceptionConfig struct {
 }
@@ -18,6 +23,8 @@ type Exception struct {
 }
 
 func NewException(observer kit.Observer, config ExceptionConfig) *Exception {
+	util.Merge(&config, _EXCEPTION_MIDDLEWARE_DEFAULT_CONFIG)
+
 	return &Exception{
 		config:   config,
 		observer: observer,

@@ -3,6 +3,7 @@ package kit
 
 import (
 	"net/http"
+	"time"
 )
 
 type Key string
@@ -23,6 +24,13 @@ var (
 	EnvIntegration Environment = "ci"
 	EnvProduction  Environment = "prod"
 )
+
+type RetryConfig struct {
+	Attempts     int
+	InitialDelay time.Duration
+	LimitDelay   time.Duration
+	Retriables   []error
+}
 
 type Level int
 

@@ -11,10 +11,15 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/neoxelox/kit"
+	"github.com/neoxelox/kit/util"
 )
 
 const (
 	_OBSERVER_MIDDLEWARE_RESPONSE_TRACE_ID_HEADER = "X-Trace-Id"
+)
+
+var (
+	_OBSERVER_MIDDLEWARE_DEFAULT_CONFIG = ObserverConfig{}
 )
 
 type ObserverConfig struct {
@@ -26,6 +31,8 @@ type Observer struct {
 }
 
 func NewObserver(observer kit.Observer, config ObserverConfig) *Observer {
+	util.Merge(&config, _OBSERVER_MIDDLEWARE_DEFAULT_CONFIG)
+
 	return &Observer{
 		config:   config,
 		observer: observer,

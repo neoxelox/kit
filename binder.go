@@ -2,6 +2,12 @@ package kit
 
 import (
 	"github.com/labstack/echo/v4"
+
+	"github.com/neoxelox/kit/util"
+)
+
+var (
+	_BINDER_DEFAULT_CONFIG = BinderConfig{}
 )
 
 type BinderConfig struct {
@@ -14,6 +20,8 @@ type Binder struct {
 }
 
 func NewBinder(observer Observer, config BinderConfig) *Binder {
+	util.Merge(&config, _BINDER_DEFAULT_CONFIG)
+
 	return &Binder{
 		observer: observer,
 		config:   config,

@@ -4,9 +4,15 @@ import (
 	"encoding/json"
 
 	"github.com/labstack/echo/v4"
+
+	"github.com/neoxelox/kit/util"
 )
 
 // TODO: faster serializer (ffjson or sonic)
+
+var (
+	_SERIALIZER_DEFAULT_CONFIG = SerializerConfig{}
+)
 
 type SerializerConfig struct {
 }
@@ -17,6 +23,8 @@ type Serializer struct {
 }
 
 func NewSerializer(observer Observer, config SerializerConfig) *Serializer {
+	util.Merge(&config, _SERIALIZER_DEFAULT_CONFIG)
+
 	return &Serializer{
 		config:   config,
 		observer: observer,

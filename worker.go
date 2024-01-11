@@ -9,22 +9,12 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+
 	"github.com/neoxelox/kit/util"
 )
 
 const (
 	_WORKER_REDIS_DSN = "%s:%d"
-)
-
-var (
-	_WORKER_DEFAULT_MAX_CONNS       = 10 * runtime.GOMAXPROCS(-1)
-	_WORKER_DEFAULT_READ_TIMEOUT    = 30 * time.Second
-	_WORKER_DEFAULT_WRITE_TIMEOUT   = 30 * time.Second
-	_WORKER_DEFAULT_DIAL_TIMEOUT    = 30 * time.Second
-	_WORKER_DEFAULT_CONCURRENCY     = 1 * runtime.GOMAXPROCS(-1)
-	_WORKER_DEFAULT_STRICT_PRIORITY = false
-	_WORKER_DEFAULT_STOP_TIMEOUT    = 30 * time.Second
-	_WORKER_DEFAULT_TIME_ZONE       = time.UTC
 )
 
 var _KlevelToAlevel = map[Level]asynq.LogLevel{
@@ -35,6 +25,19 @@ var _KlevelToAlevel = map[Level]asynq.LogLevel{
 	LvlError: asynq.ErrorLevel,
 	LvlNone:  asynq.FatalLevel,
 }
+
+var (
+	_WORKER_DEFAULT_CONFIG = WorkerConfig{
+		CacheMaxConns:        util.Pointer(10 * runtime.GOMAXPROCS(-1)),
+		CacheReadTimeout:     util.Pointer(30 * time.Second),
+		CacheWriteTimeout:    util.Pointer(30 * time.Second),
+		CacheDialTimeout:     util.Pointer(30 * time.Second),
+		WorkerConcurrency:    util.Pointer(1 * runtime.GOMAXPROCS(-1)),
+		WorkerStrictPriority: util.Pointer(false),
+		WorkerStopTimeout:    util.Pointer(30 * time.Second),
+		WorkerTimeZone:       time.UTC,
+	}
+)
 
 type WorkerConfig struct {
 	CacheHost            string
@@ -61,37 +64,7 @@ type Worker struct {
 }
 
 func NewWorker(observer Observer, config WorkerConfig) *Worker {
-	if config.CacheMaxConns == nil {
-		config.CacheMaxConns = util.Pointer(_WORKER_DEFAULT_MAX_CONNS)
-	}
-
-	if config.CacheReadTimeout == nil {
-		config.CacheReadTimeout = util.Pointer(_WORKER_DEFAULT_READ_TIMEOUT)
-	}
-
-	if config.CacheWriteTimeout == nil {
-		config.CacheWriteTimeout = util.Pointer(_WORKER_DEFAULT_WRITE_TIMEOUT)
-	}
-
-	if config.CacheDialTimeout == nil {
-		config.CacheDialTimeout = util.Pointer(_WORKER_DEFAULT_DIAL_TIMEOUT)
-	}
-
-	if config.WorkerConcurrency == nil {
-		config.WorkerConcurrency = util.Pointer(_WORKER_DEFAULT_CONCURRENCY)
-	}
-
-	if config.WorkerStrictPriority == nil {
-		config.WorkerStrictPriority = util.Pointer(_WORKER_DEFAULT_STRICT_PRIORITY)
-	}
-
-	if config.WorkerStopTimeout == nil {
-		config.WorkerStopTimeout = util.Pointer(_WORKER_DEFAULT_STOP_TIMEOUT)
-	}
-
-	if config.WorkerTimeZone == nil {
-		config.WorkerTimeZone = _WORKER_DEFAULT_TIME_ZONE
-	}
+	util.Merge(&config, _WORKER_DEFAULT_CONFIG)
 
 	dsn := fmt.Sprintf(_WORKER_REDIS_DSN, config.CacheHost, config.CachePort)
 

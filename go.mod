@@ -5,6 +5,7 @@ go 1.21.1
 toolchain go1.21.5
 
 require (
+	dario.cat/mergo v1.0.0
 	github.com/aodin/date v0.0.0-20160219192542-c5f6146fc644
 	github.com/cockroachdb/errors v1.11.1
 	github.com/eapache/go-resiliency v1.4.0

@@ -7,9 +7,14 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/neoxelox/kit"
+	"github.com/neoxelox/kit/util"
 )
 
 // TODO: check whether to merge the recover middleware with the observer one as it is not protected
+
+var (
+	_RECOVER_MIDDLEWARE_DEFAULT_CONFIG = RecoverConfig{}
+)
 
 type RecoverConfig struct {
 }
@@ -20,6 +25,8 @@ type Recover struct {
 }
 
 func NewRecover(observer kit.Observer, config RecoverConfig) *Recover {
+	util.Merge(&config, _RECOVER_MIDDLEWARE_DEFAULT_CONFIG)
+
 	return &Recover{
 		config:   config,
 		observer: observer,

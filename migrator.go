@@ -11,33 +11,39 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+
 	"github.com/neoxelox/kit/util"
 )
 
-const _MIGRATOR_POSTGRES_DSN = "postgresql://%s:%s@%s:%d/%s?sslmode=%s&x-multi-statement=true"
-
-var (
-	_MIGRATOR_DEFAULT_MIGRATIONS_PATH     = "./migrations"
-	_MIGRATOR_DEFAULT_RETRY_ATTEMPTS      = 1
-	_MIGRATOR_DEFAULT_RETRY_INITIAL_DELAY = 0 * time.Second
-	_MIGRATOR_DEFAULT_RETRY_LIMIT_DELAY   = 0 * time.Second
-	_MIGRATOR_ERR_DB_ALREADY_CLOSED       = regexp.MustCompile(`.*connection is already closed.*`)
+const (
+	_MIGRATOR_POSTGRES_DSN = "postgresql://%s:%s@%s:%d/%s?sslmode=%s&x-multi-statement=true"
 )
 
-type MigratorRetryConfig struct {
-	Attempts     int
-	InitialDelay time.Duration
-	LimitDelay   time.Duration
-}
+var (
+	_MIGRATOR_ERR_CONNECTION_ALREADY_CLOSED = regexp.MustCompile(`.*connection is already closed.*`)
+)
+
+var (
+	_MIGRATOR_DEFAULT_CONFIG = MigratorConfig{
+		MigrationsPath: util.Pointer("./migrations"),
+	}
+
+	_MIGRATOR_DEFAULT_RETRY_CONFIG = RetryConfig{
+		Attempts:     1,
+		InitialDelay: 0 * time.Second,
+		LimitDelay:   0 * time.Second,
+		Retriables:   []error{},
+	}
+)
 
 type MigratorConfig struct {
-	MigrationsPath   *string
 	DatabaseHost     string
 	DatabasePort     int
 	DatabaseSSLMode  string
 	DatabaseUser     string
 	DatabasePassword string
 	DatabaseName     string
+	MigrationsPath   *string
 }
 
 type Migrator struct {
@@ -48,20 +54,11 @@ type Migrator struct {
 }
 
 func NewMigrator(ctx context.Context, observer Observer, config MigratorConfig,
-	retry *MigratorRetryConfig) (*Migrator, error) {
-	if config.MigrationsPath == nil {
-		config.MigrationsPath = util.Pointer(_MIGRATOR_DEFAULT_MIGRATIONS_PATH)
-	}
+	retry ...RetryConfig) (*Migrator, error) {
+	util.Merge(&config, _MIGRATOR_DEFAULT_CONFIG)
+	_retry := util.Optional(retry, _MIGRATOR_DEFAULT_RETRY_CONFIG)
 
 	*config.MigrationsPath = fmt.Sprintf("file://%s", filepath.Clean(*config.MigrationsPath))
-
-	if retry == nil {
-		retry = &MigratorRetryConfig{
-			Attempts:     _MIGRATOR_DEFAULT_RETRY_ATTEMPTS,
-			InitialDelay: _MIGRATOR_DEFAULT_RETRY_INITIAL_DELAY,
-			LimitDelay:   _MIGRATOR_DEFAULT_RETRY_LIMIT_DELAY,
-		}
-	}
 
 	dsn := fmt.Sprintf(
 		_MIGRATOR_POSTGRES_DSN,
@@ -77,12 +74,12 @@ func NewMigrator(ctx context.Context, observer Observer, config MigratorConfig,
 
 	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		return util.ExponentialRetry(
-			retry.Attempts, retry.InitialDelay, retry.LimitDelay,
-			[]error{}, func(attempt int) error {
+			_retry.Attempts, _retry.InitialDelay, _retry.LimitDelay,
+			_retry.Retriables, func(attempt int) error {
 				var err error
 
 				observer.Infof(ctx, "Trying to connect to the %s database %d/%d",
-					config.DatabaseName, attempt, retry.Attempts)
+					config.DatabaseName, attempt, _retry.Attempts)
 
 				migrator, err = migrate.New(*config.MigrationsPath, dsn)
 				if err != nil {
@@ -309,7 +306,7 @@ func (self *Migrator) Close(ctx context.Context) error {
 		<-self.done
 
 		err, errD := self.migrator.Close()
-		if errD != nil && _MIGRATOR_ERR_DB_ALREADY_CLOSED.MatchString(errD.Error()) {
+		if errD != nil && _MIGRATOR_ERR_CONNECTION_ALREADY_CLOSED.MatchString(errD.Error()) {
 			errD = nil
 		}
 

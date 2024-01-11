@@ -25,16 +25,18 @@ const (
 )
 
 var (
-	_OBSERVER_DEFAULT_RETRY_ATTEMPTS      = 1
-	_OBSERVER_DEFAULT_RETRY_INITIAL_DELAY = 0 * time.Second
-	_OBSERVER_DEFAULT_RETRY_LIMIT_DELAY   = 0 * time.Second
-)
+	_OBSERVER_DEFAULT_CONFIG = ObserverConfig{
+		SentryConfig: nil,
+		GilkConfig:   nil,
+	}
 
-type ObserverRetryConfig struct {
-	Attempts     int
-	InitialDelay time.Duration
-	LimitDelay   time.Duration
-}
+	_OBSERVER_DEFAULT_RETRY_CONFIG = RetryConfig{
+		Attempts:     1,
+		InitialDelay: 0 * time.Second,
+		LimitDelay:   0 * time.Second,
+		Retriables:   []error{},
+	}
+)
 
 type ObserverSentryConfig struct {
 	Dsn string
@@ -58,14 +60,9 @@ type Observer struct {
 	Logger
 }
 
-func NewObserver(ctx context.Context, config ObserverConfig, retry *ObserverRetryConfig) (*Observer, error) {
-	if retry == nil {
-		retry = &ObserverRetryConfig{
-			Attempts:     _OBSERVER_DEFAULT_RETRY_ATTEMPTS,
-			InitialDelay: _OBSERVER_DEFAULT_RETRY_INITIAL_DELAY,
-			LimitDelay:   _OBSERVER_DEFAULT_RETRY_LIMIT_DELAY,
-		}
-	}
+func NewObserver(ctx context.Context, config ObserverConfig, retry ...RetryConfig) (*Observer, error) {
+	util.Merge(&config, _OBSERVER_DEFAULT_CONFIG)
+	_retry := util.Optional(retry, _OBSERVER_DEFAULT_RETRY_CONFIG)
 
 	logger := NewLogger(LoggerConfig{
 		AppName:        config.AppName,
@@ -76,9 +73,9 @@ func NewObserver(ctx context.Context, config ObserverConfig, retry *ObserverRetr
 	if config.SentryConfig != nil {
 		err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 			return util.ExponentialRetry(
-				retry.Attempts, retry.InitialDelay, retry.LimitDelay,
-				[]error{}, func(attempt int) error {
-					logger.Infof("Trying to connect to the Sentry service %d/%d", attempt, retry.Attempts)
+				_retry.Attempts, _retry.InitialDelay, _retry.LimitDelay,
+				_retry.Retriables, func(attempt int) error {
+					logger.Infof("Trying to connect to the Sentry service %d/%d", attempt, _retry.Attempts)
 
 					err := sentry.Init(sentry.ClientOptions{
 						Dsn:                config.SentryConfig.Dsn,

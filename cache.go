@@ -17,23 +17,24 @@ const (
 )
 
 var (
-	_CACHE_DEFAULT_MIN_CONNS           = 1
-	_CACHE_DEFAULT_MAX_CONNS           = 10 * runtime.GOMAXPROCS(-1)
-	_CACHE_DEFAULT_MAX_CONN_IDLE_TIME  = 30 * time.Minute
-	_CACHE_DEFAULT_MAX_CONN_LIFE_TIME  = 1 * time.Hour
-	_CACHE_DEFAULT_READ_TIMEOUT        = 30 * time.Second
-	_CACHE_DEFAULT_WRITE_TIMEOUT       = 30 * time.Second
-	_CACHE_DEFAULT_DIAL_TIMEOUT        = 30 * time.Second
-	_CACHE_DEFAULT_RETRY_ATTEMPTS      = 1
-	_CACHE_DEFAULT_RETRY_INITIAL_DELAY = 0 * time.Second
-	_CACHE_DEFAULT_RETRY_LIMIT_DELAY   = 0 * time.Second
-)
+	_CACHE_DEFAULT_CONFIG = CacheConfig{
+		CacheMinConns:        util.Pointer(1),
+		CacheMaxConns:        util.Pointer(10 * runtime.GOMAXPROCS(-1)),
+		CacheMaxConnIdleTime: util.Pointer(30 * time.Minute),
+		CacheMaxConnLifeTime: util.Pointer(1 * time.Hour),
+		CacheReadTimeout:     util.Pointer(30 * time.Second),
+		CacheWriteTimeout:    util.Pointer(30 * time.Second),
+		CacheDialTimeout:     util.Pointer(30 * time.Second),
+		CacheLocalConfig:     nil,
+	}
 
-type CacheRetryConfig struct {
-	Attempts     int
-	InitialDelay time.Duration
-	LimitDelay   time.Duration
-}
+	_CACHE_DEFAULT_RETRY_CONFIG = RetryConfig{
+		Attempts:     1,
+		InitialDelay: 0 * time.Second,
+		LimitDelay:   0 * time.Second,
+		Retriables:   []error{},
+	}
+)
 
 type CacheLocalConfig struct {
 	Size int
@@ -62,42 +63,9 @@ type Cache struct {
 	cache    *cache.Cache
 }
 
-func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry *CacheRetryConfig) (*Cache, error) {
-	if config.CacheMinConns == nil {
-		config.CacheMinConns = util.Pointer(_CACHE_DEFAULT_MIN_CONNS)
-	}
-
-	if config.CacheMaxConns == nil {
-		config.CacheMaxConns = util.Pointer(_CACHE_DEFAULT_MAX_CONNS)
-	}
-
-	if config.CacheMaxConnIdleTime == nil {
-		config.CacheMaxConnIdleTime = util.Pointer(_CACHE_DEFAULT_MAX_CONN_IDLE_TIME)
-	}
-
-	if config.CacheMaxConnLifeTime == nil {
-		config.CacheMaxConnLifeTime = util.Pointer(_CACHE_DEFAULT_MAX_CONN_LIFE_TIME)
-	}
-
-	if config.CacheReadTimeout == nil {
-		config.CacheReadTimeout = util.Pointer(_CACHE_DEFAULT_READ_TIMEOUT)
-	}
-
-	if config.CacheWriteTimeout == nil {
-		config.CacheWriteTimeout = util.Pointer(_CACHE_DEFAULT_WRITE_TIMEOUT)
-	}
-
-	if config.CacheDialTimeout == nil {
-		config.CacheDialTimeout = util.Pointer(_CACHE_DEFAULT_DIAL_TIMEOUT)
-	}
-
-	if retry == nil {
-		retry = &CacheRetryConfig{
-			Attempts:     _CACHE_DEFAULT_RETRY_ATTEMPTS,
-			InitialDelay: _CACHE_DEFAULT_RETRY_INITIAL_DELAY,
-			LimitDelay:   _CACHE_DEFAULT_RETRY_LIMIT_DELAY,
-		}
-	}
+func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry ...RetryConfig) (*Cache, error) {
+	util.Merge(&config, _CACHE_DEFAULT_CONFIG)
+	_retry := util.Optional(retry, _CACHE_DEFAULT_RETRY_CONFIG)
 
 	redis.SetLogger(_newRedisLogger(&observer))
 
@@ -133,11 +101,11 @@ func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry 
 
 	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		return util.ExponentialRetry(
-			retry.Attempts, retry.InitialDelay, retry.LimitDelay,
-			[]error{}, func(attempt int) error {
+			_retry.Attempts, _retry.InitialDelay, _retry.LimitDelay,
+			_retry.Retriables, func(attempt int) error {
 				var err error // nolint
 
-				observer.Infof(ctx, "Trying to connect to the cache %d/%d", attempt, retry.Attempts)
+				observer.Infof(ctx, "Trying to connect to the cache %d/%d", attempt, _retry.Attempts)
 
 				pool = redis.NewClient(poolConfig)
 

@@ -13,8 +13,9 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/leporo/sqlf"
-	"github.com/neoxelox/kit/util"
 	"github.com/randallmlough/pgxscan"
+
+	"github.com/neoxelox/kit/util"
 )
 
 const (
@@ -22,17 +23,7 @@ const (
 )
 
 var (
-	_DATABASE_DEFAULT_MIN_CONNS               = 1
-	_DATABASE_DEFAULT_MAX_CONNS               = 1 * runtime.GOMAXPROCS(-1)
-	_DATABASE_DEFAULT_MAX_CONN_IDLE_TIME      = 30 * time.Minute
-	_DATABASE_DEFAULT_MAX_CONN_LIFE_TIME      = 1 * time.Hour
-	_DATABASE_DEFAULT_DIAL_TIMEOUT            = 30 * time.Second
-	_DATABASE_DEFAULT_STATEMENT_TIMEOUT       = 30 * time.Second
-	_DATABASE_DEFAULT_DEFAULT_ISOLATION_LEVEL = IsoLvlReadCommitted
-	_DATABASE_DEFAULT_RETRY_ATTEMPTS          = 1
-	_DATABASE_DEFAULT_RETRY_INITIAL_DELAY     = 0 * time.Second
-	_DATABASE_DEFAULT_RETRY_LIMIT_DELAY       = 0 * time.Second
-	_DATABASE_ERR_PGCODE                      = regexp.MustCompile(`\(SQLSTATE (.*)\)`)
+	_DATABASE_ERR_PGCODE = regexp.MustCompile(`\(SQLSTATE (.*)\)`)
 )
 
 var _KlevelToPlevel = map[Level]pgx.LogLevel{
@@ -43,6 +34,25 @@ var _KlevelToPlevel = map[Level]pgx.LogLevel{
 	LvlError: pgx.LogLevelError,
 	LvlNone:  pgx.LogLevelNone,
 }
+
+var (
+	_DATABASE_DEFAULT_CONFIG = DatabaseConfig{
+		DatabaseMinConns:              util.Pointer(1),
+		DatabaseMaxConns:              util.Pointer(1 * runtime.GOMAXPROCS(-1)),
+		DatabaseMaxConnIdleTime:       util.Pointer(30 * time.Minute),
+		DatabaseMaxConnLifeTime:       util.Pointer(1 * time.Hour),
+		DatabaseDialTimeout:           util.Pointer(30 * time.Second),
+		DatabaseStatementTimeout:      util.Pointer(30 * time.Second),
+		DatabaseDefaultIsolationLevel: util.Pointer(IsoLvlReadCommitted),
+	}
+
+	_DATABASE_DEFAULT_RETRY_CONFIG = RetryConfig{
+		Attempts:     1,
+		InitialDelay: 0 * time.Second,
+		LimitDelay:   0 * time.Second,
+		Retriables:   []error{},
+	}
+)
 
 type IsolationLevel int
 
@@ -58,12 +68,6 @@ var _KisoLevelToPisoLevel = map[IsolationLevel]pgx.TxIsoLevel{
 	IsoLvlReadCommitted:   pgx.ReadCommitted,
 	IsoLvlRepeatableRead:  pgx.RepeatableRead,
 	IsoLvlSerializable:    pgx.Serializable,
-}
-
-type DatabaseRetryConfig struct {
-	Attempts     int
-	InitialDelay time.Duration
-	LimitDelay   time.Duration
 }
 
 type DatabaseConfig struct {
@@ -90,42 +94,9 @@ type Database struct {
 }
 
 func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig,
-	retry *DatabaseRetryConfig) (*Database, error) {
-	if config.DatabaseMinConns == nil {
-		config.DatabaseMinConns = util.Pointer(_DATABASE_DEFAULT_MIN_CONNS)
-	}
-
-	if config.DatabaseMaxConns == nil {
-		config.DatabaseMaxConns = util.Pointer(_DATABASE_DEFAULT_MAX_CONNS)
-	}
-
-	if config.DatabaseMaxConnIdleTime == nil {
-		config.DatabaseMaxConnIdleTime = util.Pointer(_DATABASE_DEFAULT_MAX_CONN_IDLE_TIME)
-	}
-
-	if config.DatabaseMaxConnLifeTime == nil {
-		config.DatabaseMaxConnLifeTime = util.Pointer(_DATABASE_DEFAULT_MAX_CONN_LIFE_TIME)
-	}
-
-	if config.DatabaseDialTimeout == nil {
-		config.DatabaseDialTimeout = util.Pointer(_DATABASE_DEFAULT_DIAL_TIMEOUT)
-	}
-
-	if config.DatabaseStatementTimeout == nil {
-		config.DatabaseStatementTimeout = util.Pointer(_DATABASE_DEFAULT_STATEMENT_TIMEOUT)
-	}
-
-	if config.DatabaseDefaultIsolationLevel == nil {
-		config.DatabaseDefaultIsolationLevel = util.Pointer(_DATABASE_DEFAULT_DEFAULT_ISOLATION_LEVEL)
-	}
-
-	if retry == nil {
-		retry = &DatabaseRetryConfig{
-			Attempts:     _DATABASE_DEFAULT_RETRY_ATTEMPTS,
-			InitialDelay: _DATABASE_DEFAULT_RETRY_INITIAL_DELAY,
-			LimitDelay:   _DATABASE_DEFAULT_RETRY_LIMIT_DELAY,
-		}
-	}
+	retry ...RetryConfig) (*Database, error) {
+	util.Merge(&config, _DATABASE_DEFAULT_CONFIG)
+	_retry := util.Optional(retry, _DATABASE_DEFAULT_RETRY_CONFIG)
 
 	dsn := fmt.Sprintf(
 		_DATABASE_POSTGRES_DSN,
@@ -168,12 +139,12 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig,
 
 	err = util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		return util.ExponentialRetry(
-			retry.Attempts, retry.InitialDelay, retry.LimitDelay,
-			[]error{}, func(attempt int) error {
+			_retry.Attempts, _retry.InitialDelay, _retry.LimitDelay,
+			_retry.Retriables, func(attempt int) error {
 				var err error // nolint
 
 				observer.Infof(ctx, "Trying to connect to the %s database %d/%d",
-					config.DatabaseName, attempt, retry.Attempts)
+					config.DatabaseName, attempt, _retry.Attempts)
 
 				pool, err = pgxpool.ConnectConfig(ctx, poolConfig)
 				if err != nil {

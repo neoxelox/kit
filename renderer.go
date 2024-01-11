@@ -10,17 +10,20 @@ import (
 	"regexp"
 
 	"github.com/labstack/echo/v4"
+
 	"github.com/neoxelox/kit/util"
 )
 
 var (
-	_RENDERER_DEFAULT_TEMPLATES_PATH      = "./templates"
-	_RENDERER_DEFAULT_TEMPLATE_EXTENSIONS = regexp.MustCompile(`^.*\.(html|txt|md)$`)
+	_RENDERER_DEFAULT_CONFIG = RendererConfig{
+		TemplatesPath:            util.Pointer("./templates"),
+		TemplateExtensionPattern: util.Pointer(`^.*\.(html|txt|md)$`),
+	}
 )
 
 type RendererConfig struct {
-	TemplatesPath      *string
-	TemplateExtensions *regexp.Regexp
+	TemplatesPath            *string
+	TemplateExtensionPattern *string
 }
 
 type Renderer struct {
@@ -30,15 +33,11 @@ type Renderer struct {
 }
 
 func NewRenderer(observer Observer, config RendererConfig) (*Renderer, error) {
-	if config.TemplatesPath == nil {
-		config.TemplatesPath = util.Pointer(_RENDERER_DEFAULT_TEMPLATES_PATH)
-	}
-
-	if config.TemplateExtensions == nil {
-		config.TemplateExtensions = _RENDERER_DEFAULT_TEMPLATE_EXTENSIONS.Copy()
-	}
+	util.Merge(&config, _RENDERER_DEFAULT_CONFIG)
 
 	*config.TemplatesPath = filepath.Clean(*config.TemplatesPath)
+
+	extensions := regexp.MustCompile(*config.TemplateExtensionPattern)
 
 	renderer := template.New("")
 
@@ -51,7 +50,7 @@ func NewRenderer(observer Observer, config RendererConfig) (*Renderer, error) {
 			return nil
 		}
 
-		if !config.TemplateExtensions.MatchString(info.Name()) {
+		if !extensions.MatchString(info.Name()) {
 			return nil
 		}
 
