@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
+	"regexp"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	echoMiddleware "github.com/labstack/echo/v4/middleware"
+
 	"github.com/neoxelox/kit/util"
 )
 
@@ -16,6 +17,7 @@ var (
 	_SERVER_DEFAULT_REQUEST_HEADER_MAX_SIZE                                = 1 << 10 // 1 KB
 	_SERVER_DEFAULT_REQUEST_BODY_MAX_SIZE                                  = 4 << 10 // 4 KB
 	_SERVER_DEFAULT_REQUEST_FILE_MAX_SIZE                                  = 2 << 20 // 2 MB
+	_SERVER_DEFAULT_REQUEST_FILE_PATH_PATTERN                              = `.*/file.*`
 	_SERVER_DEFAULT_REQUEST_KEEP_ALIVE_TIMEOUT                             = 30 * time.Second
 	_SERVER_DEFAULT_REQUEST_READ_TIMEOUT                                   = 30 * time.Second
 	_SERVER_DEFAULT_REQUEST_READ_HEADER_TIMEOUT                            = 30 * time.Second
@@ -29,6 +31,7 @@ type ServerConfig struct {
 	RequestHeaderMaxSize     *int
 	RequestBodyMaxSize       *int
 	RequestFileMaxSize       *int
+	RequestFilePathPattern   *string
 	RequestKeepAliveTimeout  *time.Duration
 	RequestReadTimeout       *time.Duration
 	RequestReadHeaderTimeout *time.Duration
@@ -54,6 +57,10 @@ func NewServer(observer Observer, serializer Serializer, binder Binder,
 
 	if config.RequestFileMaxSize == nil {
 		config.RequestFileMaxSize = util.Pointer(_SERVER_DEFAULT_REQUEST_FILE_MAX_SIZE)
+	}
+
+	if config.RequestFilePathPattern == nil {
+		config.RequestFilePathPattern = util.Pointer(_SERVER_DEFAULT_REQUEST_FILE_PATH_PATTERN)
 	}
 
 	if config.RequestKeepAliveTimeout == nil {
@@ -97,11 +104,10 @@ func NewServer(observer Observer, serializer Serializer, binder Binder,
 	server.HTTPErrorHandler = exceptionHandler.Handle
 	server.IPExtractor = *config.RequestIPExtractor
 
-	// TODO: move this to a middleware in order to be able to log giant requests?
+	var requestFilePathPattern = regexp.MustCompile(*config.RequestFilePathPattern)
 	server.Pre(echoMiddleware.BodyLimitWithConfig(echoMiddleware.BodyLimitConfig{
 		Skipper: func(ctx echo.Context) bool {
-			// TODO: allow to customize this or provide a built-in system for files?
-			return strings.HasPrefix(ctx.Request().RequestURI, "/file")
+			return requestFilePathPattern.MatchString(ctx.Request().RequestURI)
 		},
 		Limit: util.ByteSize(*config.RequestBodyMaxSize),
 	}))

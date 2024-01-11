@@ -24,7 +24,6 @@ var (
 	_CACHE_DEFAULT_READ_TIMEOUT        = 30 * time.Second
 	_CACHE_DEFAULT_WRITE_TIMEOUT       = 30 * time.Second
 	_CACHE_DEFAULT_DIAL_TIMEOUT        = 30 * time.Second
-	_CACHE_DEFAULT_ACQUIRE_TIMEOUT     = 30 * time.Second
 	_CACHE_DEFAULT_RETRY_ATTEMPTS      = 1
 	_CACHE_DEFAULT_RETRY_INITIAL_DELAY = 0 * time.Second
 	_CACHE_DEFAULT_RETRY_LIMIT_DELAY   = 0 * time.Second
@@ -53,7 +52,6 @@ type CacheConfig struct {
 	CacheReadTimeout     *time.Duration
 	CacheWriteTimeout    *time.Duration
 	CacheDialTimeout     *time.Duration
-	CacheAcquireTimeout  *time.Duration
 	CacheLocalConfig     *CacheLocalConfig
 }
 
@@ -93,10 +91,6 @@ func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry 
 		config.CacheDialTimeout = util.Pointer(_CACHE_DEFAULT_DIAL_TIMEOUT)
 	}
 
-	if config.CacheAcquireTimeout == nil {
-		config.CacheAcquireTimeout = util.Pointer(_CACHE_DEFAULT_ACQUIRE_TIMEOUT)
-	}
-
 	if retry == nil {
 		retry = &CacheRetryConfig{
 			Attempts:     _CACHE_DEFAULT_RETRY_ATTEMPTS,
@@ -127,7 +121,7 @@ func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry 
 		ReadTimeout:  *config.CacheReadTimeout,
 		WriteTimeout: *config.CacheWriteTimeout,
 		DialTimeout:  *config.CacheDialTimeout,
-		PoolTimeout:  *config.CacheAcquireTimeout,
+		PoolTimeout:  *config.CacheDialTimeout,
 	}
 
 	var localCache cache.LocalCache

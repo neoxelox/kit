@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"runtime"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgconn"
@@ -21,16 +22,18 @@ const (
 )
 
 var (
-	_DATABASE_DEFAULT_MIN_CONNS          = 1
-	_DATABASE_DEFAULT_MAX_CONNS          = 1 * runtime.GOMAXPROCS(-1)
-	_DATABASE_DEFAULT_MAX_CONN_IDLE_TIME = 30 * time.Minute
-	_DATABASE_DEFAULT_MAX_CONN_LIFE_TIME = 1 * time.Hour
-	// _DATABASE_DEFAULT_DIAL_TIMEOUT  = 30 * time.Second // TODO: check where this goes
-	// _DATABASE_DEFAULT_ACQUIRE_TIMEOUT  = 30 * time.Second // TODO: check where this goes
-	_DATABASE_DEFAULT_RETRY_ATTEMPTS      = 1
-	_DATABASE_DEFAULT_RETRY_INITIAL_DELAY = 0 * time.Second
-	_DATABASE_DEFAULT_RETRY_LIMIT_DELAY   = 0 * time.Second
-	_DATABASE_ERR_PGCODE                  = regexp.MustCompile(`\(SQLSTATE (.*)\)`)
+	_DATABASE_DEFAULT_MIN_CONNS               = 1
+	_DATABASE_DEFAULT_MAX_CONNS               = 1 * runtime.GOMAXPROCS(-1)
+	_DATABASE_DEFAULT_MAX_CONN_IDLE_TIME      = 30 * time.Minute
+	_DATABASE_DEFAULT_MAX_CONN_LIFE_TIME      = 1 * time.Hour
+	_DATABASE_DEFAULT_DIAL_TIMEOUT            = 30 * time.Second
+	_DATABASE_DEFAULT_STATEMENT_TIMEOUT       = 30 * time.Second
+	_DATABASE_DEFAULT_LOCK_TIMEOUT            = 30 * time.Second
+	_DATABASE_DEFAULT_DEFAULT_ISOLATION_LEVEL = IsoLvlReadCommitted
+	_DATABASE_DEFAULT_RETRY_ATTEMPTS          = 1
+	_DATABASE_DEFAULT_RETRY_INITIAL_DELAY     = 0 * time.Second
+	_DATABASE_DEFAULT_RETRY_LIMIT_DELAY       = 0 * time.Second
+	_DATABASE_ERR_PGCODE                      = regexp.MustCompile(`\(SQLSTATE (.*)\)`)
 )
 
 var _KlevelToPlevel = map[Level]pgx.LogLevel{
@@ -42,6 +45,22 @@ var _KlevelToPlevel = map[Level]pgx.LogLevel{
 	LvlNone:  pgx.LogLevelNone,
 }
 
+type IsolationLevel int
+
+var (
+	IsoLvlReadUncommitted IsolationLevel = 0
+	IsoLvlReadCommitted   IsolationLevel
+	IsoLvlRepeatableRead  IsolationLevel
+	IsoLvlSerializable    IsolationLevel
+)
+
+var _KisoLevelToPisoLevel = map[IsolationLevel]pgx.TxIsoLevel{
+	IsoLvlReadUncommitted: pgx.ReadUncommitted,
+	IsoLvlReadCommitted:   pgx.ReadCommitted,
+	IsoLvlRepeatableRead:  pgx.RepeatableRead,
+	IsoLvlSerializable:    pgx.Serializable,
+}
+
 type DatabaseRetryConfig struct {
 	Attempts     int
 	InitialDelay time.Duration
@@ -49,17 +68,21 @@ type DatabaseRetryConfig struct {
 }
 
 type DatabaseConfig struct {
-	DatabaseHost            string
-	DatabasePort            int
-	DatabaseSSLMode         string
-	DatabaseUser            string
-	DatabasePassword        string
-	DatabaseName            string
-	AppName                 string
-	DatabaseMinConns        *int
-	DatabaseMaxConns        *int
-	DatabaseMaxConnIdleTime *time.Duration
-	DatabaseMaxConnLifeTime *time.Duration
+	DatabaseHost                  string
+	DatabasePort                  int
+	DatabaseSSLMode               string
+	DatabaseUser                  string
+	DatabasePassword              string
+	DatabaseName                  string
+	AppName                       string
+	DatabaseMinConns              *int
+	DatabaseMaxConns              *int
+	DatabaseMaxConnIdleTime       *time.Duration
+	DatabaseMaxConnLifeTime       *time.Duration
+	DatabaseDialTimeout           *time.Duration
+	DatabaseStatementTimeout      *time.Duration
+	DatabaseLockTimeout           *time.Duration
+	DatabaseDefaultIsolationLevel *IsolationLevel
 }
 
 type Database struct {
@@ -84,6 +107,22 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig,
 
 	if config.DatabaseMaxConnLifeTime == nil {
 		config.DatabaseMaxConnLifeTime = util.Pointer(_DATABASE_DEFAULT_MAX_CONN_LIFE_TIME)
+	}
+
+	if config.DatabaseDialTimeout == nil {
+		config.DatabaseDialTimeout = util.Pointer(_DATABASE_DEFAULT_DIAL_TIMEOUT)
+	}
+
+	if config.DatabaseStatementTimeout == nil {
+		config.DatabaseStatementTimeout = util.Pointer(_DATABASE_DEFAULT_STATEMENT_TIMEOUT)
+	}
+
+	if config.DatabaseLockTimeout == nil {
+		config.DatabaseLockTimeout = util.Pointer(_DATABASE_DEFAULT_LOCK_TIMEOUT)
+	}
+
+	if config.DatabaseDefaultIsolationLevel == nil {
+		config.DatabaseDefaultIsolationLevel = util.Pointer(_DATABASE_DEFAULT_DEFAULT_ISOLATION_LEVEL)
 	}
 
 	if retry == nil {
@@ -113,8 +152,12 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig,
 	poolConfig.MaxConns = int32(*config.DatabaseMaxConns)
 	poolConfig.MaxConnIdleTime = *config.DatabaseMaxConnIdleTime
 	poolConfig.MaxConnLifetime = *config.DatabaseMaxConnLifeTime
+	poolConfig.ConnConfig.ConnectTimeout = *config.DatabaseDialTimeout
 	poolConfig.ConnConfig.RuntimeParams["standard_conforming_strings"] = "on"
 	poolConfig.ConnConfig.RuntimeParams["application_name"] = config.AppName
+	poolConfig.ConnConfig.RuntimeParams["default_transaction_isolation"] = string(_KisoLevelToPisoLevel[*config.DatabaseDefaultIsolationLevel])
+	poolConfig.ConnConfig.RuntimeParams["statement_timeout"] = strconv.Itoa(int(config.DatabaseStatementTimeout.Milliseconds()))
+	poolConfig.ConnConfig.RuntimeParams["lock_timeout"] = strconv.Itoa(int(config.DatabaseLockTimeout.Milliseconds()))
 
 	pgxLogger := _newPgxLogger(&observer)
 	pgxLogLevel := _KlevelToPlevel[pgxLogger.observer.Level()]
@@ -288,7 +331,11 @@ func (self *Database) Exec(ctx context.Context, stmt *sqlf.Stmt) (int, error) {
 	return int(command.RowsAffected()), nil
 }
 
-func (self *Database) Transaction(ctx context.Context, fn func(ctx context.Context) error) error {
+func (self *Database) Transaction(ctx context.Context, level *IsolationLevel, fn func(ctx context.Context) error) error {
+	if level == nil {
+		level = self.config.DatabaseDefaultIsolationLevel
+	}
+
 	if ctx.Value(KeyDatabaseTransaction) != nil {
 		err := fn(ctx)
 		if err != nil {
@@ -299,7 +346,7 @@ func (self *Database) Transaction(ctx context.Context, fn func(ctx context.Conte
 	}
 
 	transaction, err := self.pool.BeginTx(ctx, pgx.TxOptions{
-		IsoLevel:   pgx.Serializable,
+		IsoLevel:   _KisoLevelToPisoLevel[*level],
 		AccessMode: pgx.ReadWrite,
 	})
 	if err != nil {
