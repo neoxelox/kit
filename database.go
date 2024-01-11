@@ -37,13 +37,13 @@ var _KlevelToPlevel = map[Level]pgx.LogLevel{
 
 var (
 	_DATABASE_DEFAULT_CONFIG = DatabaseConfig{
-		DatabaseMinConns:              util.Pointer(1),
-		DatabaseMaxConns:              util.Pointer(max(4, 2*runtime.GOMAXPROCS(-1))),
-		DatabaseMaxConnIdleTime:       util.Pointer(30 * time.Minute),
-		DatabaseMaxConnLifeTime:       util.Pointer(1 * time.Hour),
-		DatabaseDialTimeout:           util.Pointer(30 * time.Second),
-		DatabaseStatementTimeout:      util.Pointer(30 * time.Second),
-		DatabaseDefaultIsolationLevel: util.Pointer(IsoLvlReadCommitted),
+		MinConns:              util.Pointer(1),
+		MaxConns:              util.Pointer(max(4, 2*runtime.GOMAXPROCS(-1))),
+		MaxConnIdleTime:       util.Pointer(30 * time.Minute),
+		MaxConnLifeTime:       util.Pointer(1 * time.Hour),
+		DialTimeout:           util.Pointer(30 * time.Second),
+		StatementTimeout:      util.Pointer(30 * time.Second),
+		DefaultIsolationLevel: util.Pointer(IsoLvlReadCommitted),
 	}
 
 	_DATABASE_DEFAULT_RETRY_CONFIG = RetryConfig{
@@ -71,20 +71,20 @@ var _KisoLevelToPisoLevel = map[IsolationLevel]pgx.TxIsoLevel{
 }
 
 type DatabaseConfig struct {
-	DatabaseHost                  string
-	DatabasePort                  int
-	DatabaseSSLMode               string
-	DatabaseUser                  string
-	DatabasePassword              string
-	DatabaseName                  string
-	AppName                       string
-	DatabaseMinConns              *int
-	DatabaseMaxConns              *int
-	DatabaseMaxConnIdleTime       *time.Duration
-	DatabaseMaxConnLifeTime       *time.Duration
-	DatabaseDialTimeout           *time.Duration
-	DatabaseStatementTimeout      *time.Duration
-	DatabaseDefaultIsolationLevel *IsolationLevel
+	Host                  string
+	Port                  int
+	SSLMode               string
+	User                  string
+	Password              string
+	Database              string
+	Service               string
+	MinConns              *int
+	MaxConns              *int
+	MaxConnIdleTime       *time.Duration
+	MaxConnLifeTime       *time.Duration
+	DialTimeout           *time.Duration
+	StatementTimeout      *time.Duration
+	DefaultIsolationLevel *IsolationLevel
 }
 
 type Database struct {
@@ -100,12 +100,12 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig,
 
 	dsn := fmt.Sprintf(
 		_DATABASE_POSTGRES_DSN,
-		config.DatabaseUser,
-		config.DatabasePassword,
-		config.DatabaseHost,
-		config.DatabasePort,
-		config.DatabaseName,
-		config.DatabaseSSLMode,
+		config.User,
+		config.Password,
+		config.Host,
+		config.Port,
+		config.Database,
+		config.SSLMode,
 	)
 
 	poolConfig, err := pgxpool.ParseConfig(dsn)
@@ -113,16 +113,16 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig,
 		return nil, ErrDatabaseGeneric().Wrap(err)
 	}
 
-	poolConfig.MinConns = int32(*config.DatabaseMinConns)
-	poolConfig.MaxConns = int32(*config.DatabaseMaxConns)
-	poolConfig.MaxConnIdleTime = *config.DatabaseMaxConnIdleTime
-	poolConfig.MaxConnLifetime = *config.DatabaseMaxConnLifeTime
-	poolConfig.ConnConfig.ConnectTimeout = *config.DatabaseDialTimeout
+	poolConfig.MinConns = int32(*config.MinConns)
+	poolConfig.MaxConns = int32(*config.MaxConns)
+	poolConfig.MaxConnIdleTime = *config.MaxConnIdleTime
+	poolConfig.MaxConnLifetime = *config.MaxConnLifeTime
+	poolConfig.ConnConfig.ConnectTimeout = *config.DialTimeout
 	poolConfig.ConnConfig.RuntimeParams["standard_conforming_strings"] = "on"
-	poolConfig.ConnConfig.RuntimeParams["application_name"] = config.AppName
-	poolConfig.ConnConfig.RuntimeParams["default_transaction_isolation"] = string(_KisoLevelToPisoLevel[*config.DatabaseDefaultIsolationLevel])
-	poolConfig.ConnConfig.RuntimeParams["statement_timeout"] = strconv.Itoa(int(config.DatabaseStatementTimeout.Milliseconds()))
-	poolConfig.ConnConfig.RuntimeParams["lock_timeout"] = strconv.Itoa(int(config.DatabaseStatementTimeout.Milliseconds()))
+	poolConfig.ConnConfig.RuntimeParams["application_name"] = config.Service
+	poolConfig.ConnConfig.RuntimeParams["default_transaction_isolation"] = string(_KisoLevelToPisoLevel[*config.DefaultIsolationLevel])
+	poolConfig.ConnConfig.RuntimeParams["statement_timeout"] = strconv.Itoa(int(config.StatementTimeout.Milliseconds()))
+	poolConfig.ConnConfig.RuntimeParams["lock_timeout"] = strconv.Itoa(int(config.StatementTimeout.Milliseconds()))
 
 	pgxLogger := _newPgxLogger(&observer)
 	pgxLogLevel := _KlevelToPlevel[pgxLogger.observer.Level()]
@@ -144,7 +144,7 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig,
 				var err error // nolint
 
 				observer.Infof(ctx, "Trying to connect to the %s database %d/%d",
-					config.DatabaseName, attempt, _retry.Attempts)
+					config.Database, attempt, _retry.Attempts)
 
 				pool, err = pgxpool.ConnectConfig(ctx, poolConfig)
 				if err != nil {
@@ -167,7 +167,7 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig,
 		return nil, ErrDatabaseGeneric().Wrap(err)
 	}
 
-	observer.Infof(ctx, "Connected to the %s database", config.DatabaseName)
+	observer.Infof(ctx, "Connected to the %s database", config.Database)
 
 	sqlf.SetDialect(sqlf.PostgreSQL)
 
@@ -181,9 +181,9 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig,
 func (self *Database) Health(ctx context.Context) error {
 	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		currentConns := self.pool.Stat().TotalConns()
-		if currentConns < int32(*self.config.DatabaseMinConns) {
+		if currentConns < int32(*self.config.MinConns) {
 			return ErrDatabaseUnhealthy().Withf("current conns %d below minimum %d",
-				currentConns, *self.config.DatabaseMinConns)
+				currentConns, *self.config.MinConns)
 		}
 
 		err := self.pool.Ping(ctx)
@@ -298,7 +298,7 @@ func (self *Database) Exec(ctx context.Context, stmt *sqlf.Stmt) (int, error) {
 
 func (self *Database) Transaction(ctx context.Context, level *IsolationLevel, fn func(ctx context.Context) error) error {
 	if level == nil {
-		level = self.config.DatabaseDefaultIsolationLevel
+		level = self.config.DefaultIsolationLevel
 	}
 
 	if ctx.Value(KeyDatabaseTransaction) != nil {
@@ -360,11 +360,11 @@ func (self *Database) Transaction(ctx context.Context, level *IsolationLevel, fn
 
 func (self *Database) Close(ctx context.Context) error {
 	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
-		self.observer.Infof(ctx, "Closing %s database", self.config.DatabaseName)
+		self.observer.Infof(ctx, "Closing %s database", self.config.Database)
 
 		self.pool.Close()
 
-		self.observer.Infof(ctx, "Closed %s database", self.config.DatabaseName)
+		self.observer.Infof(ctx, "Closed %s database", self.config.Database)
 
 		return nil
 	})

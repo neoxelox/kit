@@ -26,8 +26,8 @@ const (
 
 var (
 	_OBSERVER_DEFAULT_CONFIG = ObserverConfig{
-		SentryConfig: nil,
-		GilkConfig:   nil,
+		Sentry: nil,
+		Gilk:   nil,
 	}
 
 	_OBSERVER_DEFAULT_RETRY_CONFIG = RetryConfig{
@@ -47,12 +47,12 @@ type ObserverGilkConfig struct {
 }
 
 type ObserverConfig struct {
-	Environment  Environment
-	Release      string
-	AppName      string
-	Level        Level
-	SentryConfig *ObserverSentryConfig
-	GilkConfig   *ObserverGilkConfig
+	Environment Environment
+	Release     string
+	Service     string
+	Level       Level
+	Sentry      *ObserverSentryConfig
+	Gilk        *ObserverGilkConfig
 }
 
 type Observer struct {
@@ -65,12 +65,12 @@ func NewObserver(ctx context.Context, config ObserverConfig, retry ...RetryConfi
 	_retry := util.Optional(retry, _OBSERVER_DEFAULT_RETRY_CONFIG)
 
 	logger := NewLogger(LoggerConfig{
-		AppName:        config.AppName,
+		Service:        config.Service,
 		Level:          config.Level,
 		SkipFrameCount: util.Pointer(2),
 	})
 
-	if config.SentryConfig != nil {
+	if config.Sentry != nil {
 		err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 			return util.ExponentialRetry(
 				_retry.Attempts, _retry.InitialDelay, _retry.LimitDelay,
@@ -78,10 +78,10 @@ func NewObserver(ctx context.Context, config ObserverConfig, retry ...RetryConfi
 					logger.Infof("Trying to connect to the Sentry service %d/%d", attempt, _retry.Attempts)
 
 					err := sentry.Init(sentry.ClientOptions{
-						Dsn:                config.SentryConfig.Dsn,
+						Dsn:                config.Sentry.Dsn,
 						Environment:        string(config.Environment),
 						Release:            config.Release,
-						ServerName:         config.AppName,
+						ServerName:         config.Service,
 						Debug:              false,
 						AttachStacktrace:   false, // Already done by errors package
 						EnableTracing:      true,
@@ -107,20 +107,20 @@ func NewObserver(ctx context.Context, config ObserverConfig, retry ...RetryConfi
 		logger.Info("Connected to the Sentry service")
 	}
 
-	if config.GilkConfig != nil {
+	if config.Gilk != nil {
 		logger.Info("Starting the Gilk service")
 
 		// Skip 3 dataframes when using observer in database wrapper, otherwise 2
 		gilk.SkippedStackFrames = 3
 
 		go func() {
-			err := gilk.Serve(fmt.Sprintf(":%d", config.GilkConfig.Port))
+			err := gilk.Serve(fmt.Sprintf(":%d", config.Gilk.Port))
 			if err != nil && err != http.ErrServerClosed {
 				logger.Error(ErrObserverGeneric().Wrap(err))
 			}
 		}()
 
-		logger.Infof("Started the Gilk service at port %d", config.GilkConfig.Port)
+		logger.Infof("Started the Gilk service at port %d", config.Gilk.Port)
 	}
 
 	return &Observer{
@@ -238,7 +238,7 @@ func (self Observer) Error(ctx context.Context, i ...any) {
 
 	self.Logger.Error(i...)
 
-	if self.config.SentryConfig != nil {
+	if self.config.Sentry != nil {
 		self.sendErrToSentry(ctx, i...)
 	}
 }
@@ -250,7 +250,7 @@ func (self Observer) Errorf(ctx context.Context, format string, i ...any) {
 
 	self.Logger.Errorf(format, i...)
 
-	if self.config.SentryConfig != nil {
+	if self.config.Sentry != nil {
 		self.sendErrToSentry(ctx, fmt.Sprintf(format, i...))
 	}
 }
@@ -262,7 +262,7 @@ func (self Observer) Fatal(ctx context.Context, i ...any) {
 
 	self.Logger.Fatal(i...)
 
-	if self.config.SentryConfig != nil {
+	if self.config.Sentry != nil {
 		self.sendErrToSentry(ctx, i...)
 	}
 }
@@ -274,7 +274,7 @@ func (self Observer) Fatalf(ctx context.Context, format string, i ...any) {
 
 	self.Logger.Fatalf(format, i...)
 
-	if self.config.SentryConfig != nil {
+	if self.config.Sentry != nil {
 		self.sendErrToSentry(ctx, fmt.Sprintf(format, i...))
 	}
 }
@@ -286,7 +286,7 @@ func (self Observer) Panic(ctx context.Context, i ...any) {
 
 	self.Logger.Panic(i...)
 
-	if self.config.SentryConfig != nil {
+	if self.config.Sentry != nil {
 		self.sendErrToSentry(ctx, i...)
 	}
 }
@@ -298,7 +298,7 @@ func (self Observer) Panicf(ctx context.Context, format string, i ...any) {
 
 	self.Logger.Panicf(format, i...)
 
-	if self.config.SentryConfig != nil {
+	if self.config.Sentry != nil {
 		self.sendErrToSentry(ctx, fmt.Sprintf(format, i...))
 	}
 }
@@ -353,7 +353,7 @@ func (self Observer) TraceSpan(ctx context.Context, name ...string) (context.Con
 	spanName := util.Optional(name, runtime.FuncForPC(pc).Name())
 
 	var sentrySpan *sentry.Span
-	if self.config.SentryConfig != nil {
+	if self.config.Sentry != nil {
 		sentryHub := sentry.GetHubFromContext(ctx)
 		if sentryHub == nil {
 			sentryHub = sentry.CurrentHub().Clone()
@@ -373,7 +373,7 @@ func (self Observer) TraceSpan(ctx context.Context, name ...string) (context.Con
 	}
 
 	return ctx, func() {
-		if self.config.SentryConfig != nil {
+		if self.config.Sentry != nil {
 			sentrySpan.Finish()
 		}
 	}
@@ -389,12 +389,12 @@ func (self Observer) TraceRequest(ctx context.Context, request *http.Request) (c
 	spanName := fmt.Sprintf("%s %s", request.Method, request.RequestURI)
 
 	var endGilkRequest func()
-	if self.config.GilkConfig != nil {
+	if self.config.Gilk != nil {
 		ctx, endGilkRequest = gilk.NewContext(ctx, request.RequestURI, request.Method)
 	}
 
 	var sentrySpan *sentry.Span
-	if self.config.SentryConfig != nil {
+	if self.config.Sentry != nil {
 		sentryTrace := ""
 		if request.Header.Get(sentry.SentryTraceHeader) != "" {
 			sentryTrace = request.Header.Get(sentry.SentryTraceHeader)
@@ -423,11 +423,11 @@ func (self Observer) TraceRequest(ctx context.Context, request *http.Request) (c
 	}
 
 	return ctx, func() {
-		if self.config.GilkConfig != nil {
+		if self.config.Gilk != nil {
 			endGilkRequest()
 		}
 
-		if self.config.SentryConfig != nil {
+		if self.config.Sentry != nil {
 			sentrySpan.Finish()
 		}
 	}
@@ -442,7 +442,7 @@ func (self Observer) TraceQuery(ctx context.Context, sql string, args ...any) (c
 	spanName := runtime.FuncForPC(pc).Name()
 
 	var endGilkQuery func()
-	if self.config.GilkConfig != nil {
+	if self.config.Gilk != nil {
 		dArgs := make([]any, len(args))
 		copy(dArgs, args)
 
@@ -450,7 +450,7 @@ func (self Observer) TraceQuery(ctx context.Context, sql string, args ...any) (c
 	}
 
 	var sentrySpan *sentry.Span
-	if self.config.SentryConfig != nil {
+	if self.config.Sentry != nil {
 		sentryHub := sentry.GetHubFromContext(ctx)
 		if sentryHub == nil {
 			sentryHub = sentry.CurrentHub().Clone()
@@ -470,11 +470,11 @@ func (self Observer) TraceQuery(ctx context.Context, sql string, args ...any) (c
 	}
 
 	return ctx, func() {
-		if self.config.GilkConfig != nil {
+		if self.config.Gilk != nil {
 			endGilkQuery()
 		}
 
-		if self.config.SentryConfig != nil {
+		if self.config.Sentry != nil {
 			sentrySpan.Finish()
 		}
 	}
@@ -492,7 +492,7 @@ func (self Observer) TraceTask(ctx context.Context, task *asynq.Task) (context.C
 	spanName := task.Type()
 
 	var sentrySpan *sentry.Span
-	if self.config.SentryConfig != nil {
+	if self.config.Sentry != nil {
 		sentryTrace := ""
 		if data[sentry.SentryTraceHeader] != nil {
 			sentryTrace = data[sentry.SentryTraceHeader].(string)
@@ -517,7 +517,7 @@ func (self Observer) TraceTask(ctx context.Context, task *asynq.Task) (context.C
 	}
 
 	return ctx, func() {
-		if self.config.SentryConfig != nil {
+		if self.config.Sentry != nil {
 			sentrySpan.Finish()
 		}
 	}
@@ -530,7 +530,7 @@ func (self Observer) Flush(ctx context.Context) error {
 			return ErrObserverGeneric().WrapAs(err)
 		}
 
-		if self.config.SentryConfig != nil {
+		if self.config.Sentry != nil {
 			sentryFlushTimeout := _OBSERVER_SENTRY_FLUSH_TIMEOUT
 			if ctxDeadline, ok := ctx.Deadline(); ok {
 				sentryFlushTimeout = time.Until(ctxDeadline)
@@ -542,7 +542,7 @@ func (self Observer) Flush(ctx context.Context) error {
 			}
 		}
 
-		if self.config.GilkConfig != nil {
+		if self.config.Gilk != nil {
 			gilk.Reset()
 		}
 
@@ -567,13 +567,13 @@ func (self Observer) Close(ctx context.Context) error {
 			return ErrObserverGeneric().WrapAs(err)
 		}
 
-		if self.config.SentryConfig != nil {
+		if self.config.Sentry != nil {
 			// Dummy log in order to mantain consistency although Sentry has no close() method
 			self.Logger.Info("Closing Sentry service")
 			self.Logger.Info("Closed Sentry service")
 		}
 
-		if self.config.GilkConfig != nil {
+		if self.config.Gilk != nil {
 			// Dummy log in order to mantain consistency although Gilk has no close() method
 			self.Logger.Info("Closing Gilk service")
 			self.Logger.Info("Closed Gilk service")

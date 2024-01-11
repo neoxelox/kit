@@ -19,15 +19,15 @@ import (
 
 var (
 	_LOCALIZER_DEFAULT_CONFIG = LocalizerConfig{
-		LocalesPath:            util.Pointer("./locales"),
-		LocaleExtensionPattern: util.Pointer(`^.*\.(yml|yaml)$`),
+		LocalesPath:       util.Pointer("./locales"),
+		LocaleFilePattern: util.Pointer(`^.*\.(yml|yaml)$`),
 	}
 )
 
 type LocalizerConfig struct {
-	DefaultLocale          language.Tag
-	LocalesPath            *string
-	LocaleExtensionPattern *string
+	DefaultLocale     language.Tag
+	LocalesPath       *string
+	LocaleFilePattern *string
 }
 
 type Localizer struct {
@@ -42,7 +42,7 @@ func NewLocalizer(observer Observer, config LocalizerConfig) (*Localizer, error)
 
 	*config.LocalesPath = filepath.Clean(*config.LocalesPath)
 
-	extensions := regexp.MustCompile(*config.LocaleExtensionPattern)
+	extensions := regexp.MustCompile(*config.LocaleFilePattern)
 
 	copiesByLang, err := _getCopies(&observer, *config.LocalesPath, extensions)
 	if err != nil {

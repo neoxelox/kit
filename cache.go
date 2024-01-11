@@ -18,14 +18,13 @@ const (
 
 var (
 	_CACHE_DEFAULT_CONFIG = CacheConfig{
-		CacheMinConns:        util.Pointer(1),
-		CacheMaxConns:        util.Pointer(max(8, 4*runtime.GOMAXPROCS(-1))),
-		CacheMaxConnIdleTime: util.Pointer(30 * time.Minute),
-		CacheMaxConnLifeTime: util.Pointer(1 * time.Hour),
-		CacheReadTimeout:     util.Pointer(30 * time.Second),
-		CacheWriteTimeout:    util.Pointer(30 * time.Second),
-		CacheDialTimeout:     util.Pointer(30 * time.Second),
-		CacheLocalConfig:     nil,
+		MinConns:        util.Pointer(1),
+		MaxConns:        util.Pointer(max(8, 4*runtime.GOMAXPROCS(-1))),
+		MaxConnIdleTime: util.Pointer(30 * time.Minute),
+		MaxConnLifeTime: util.Pointer(1 * time.Hour),
+		ReadTimeout:     util.Pointer(30 * time.Second),
+		WriteTimeout:    util.Pointer(30 * time.Second),
+		DialTimeout:     util.Pointer(30 * time.Second),
 	}
 
 	_CACHE_DEFAULT_RETRY_CONFIG = RetryConfig{
@@ -36,24 +35,18 @@ var (
 	}
 )
 
-type CacheLocalConfig struct {
-	Size int
-	TTL  time.Duration
-}
-
 type CacheConfig struct {
-	CacheHost            string
-	CachePort            int
-	CacheSSLMode         bool
-	CachePassword        string
-	CacheMinConns        *int
-	CacheMaxConns        *int
-	CacheMaxConnIdleTime *time.Duration
-	CacheMaxConnLifeTime *time.Duration
-	CacheReadTimeout     *time.Duration
-	CacheWriteTimeout    *time.Duration
-	CacheDialTimeout     *time.Duration
-	CacheLocalConfig     *CacheLocalConfig
+	Host            string
+	Port            int
+	SSLMode         bool
+	Password        string
+	MinConns        *int
+	MaxConns        *int
+	MaxConnIdleTime *time.Duration
+	MaxConnLifeTime *time.Duration
+	ReadTimeout     *time.Duration
+	WriteTimeout    *time.Duration
+	DialTimeout     *time.Duration
 }
 
 type Cache struct {
@@ -69,10 +62,10 @@ func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry 
 
 	redis.SetLogger(_newRedisLogger(&observer))
 
-	dsn := fmt.Sprintf(_CACHE_REDIS_DSN, config.CacheHost, config.CachePort)
+	dsn := fmt.Sprintf(_CACHE_REDIS_DSN, config.Host, config.Port)
 
 	var ssl *tls.Config
-	if config.CacheSSLMode {
+	if config.SSLMode {
 		ssl = &tls.Config{
 			MinVersion: tls.VersionTLS12,
 		}
@@ -81,20 +74,15 @@ func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry 
 	poolConfig := &redis.Options{
 		Addr:         dsn,
 		TLSConfig:    ssl,
-		Password:     config.CachePassword,
-		MinIdleConns: *config.CacheMinConns,
-		PoolSize:     *config.CacheMaxConns,
-		IdleTimeout:  *config.CacheMaxConnIdleTime,
-		MaxConnAge:   *config.CacheMaxConnLifeTime,
-		ReadTimeout:  *config.CacheReadTimeout,
-		WriteTimeout: *config.CacheWriteTimeout,
-		DialTimeout:  *config.CacheDialTimeout,
-		PoolTimeout:  *config.CacheDialTimeout,
-	}
-
-	var localCache cache.LocalCache
-	if config.CacheLocalConfig != nil {
-		localCache = cache.NewTinyLFU(config.CacheLocalConfig.Size, config.CacheLocalConfig.TTL)
+		Password:     config.Password,
+		MinIdleConns: *config.MinConns,
+		PoolSize:     *config.MaxConns,
+		IdleTimeout:  *config.MaxConnIdleTime,
+		MaxConnAge:   *config.MaxConnLifeTime,
+		ReadTimeout:  *config.ReadTimeout,
+		WriteTimeout: *config.WriteTimeout,
+		DialTimeout:  *config.DialTimeout,
+		PoolTimeout:  *config.DialTimeout,
 	}
 
 	var pool *redis.Client
@@ -129,7 +117,7 @@ func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry 
 
 	cache := cache.New(&cache.Options{
 		Redis:        pool,
-		LocalCache:   localCache,
+		LocalCache:   nil,
 		StatsEnabled: false,
 	})
 
@@ -144,9 +132,9 @@ func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry 
 func (self *Cache) Health(ctx context.Context) error {
 	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		currentConns := self.pool.PoolStats().TotalConns
-		if currentConns < uint32(*self.config.CacheMinConns) {
+		if currentConns < uint32(*self.config.MinConns) {
 			return ErrCacheUnhealthy().Withf("current conns %d below minimum %d",
-				currentConns, *self.config.CacheMinConns)
+				currentConns, *self.config.MinConns)
 		}
 
 		result, err := self.pool.Ping(ctx).Result()

@@ -28,31 +28,31 @@ var _KlevelToAlevel = map[Level]asynq.LogLevel{
 
 var (
 	_WORKER_DEFAULT_CONFIG = WorkerConfig{
-		CacheMaxConns:        util.Pointer(max(8, 4*runtime.GOMAXPROCS(-1))),
-		CacheReadTimeout:     util.Pointer(30 * time.Second),
-		CacheWriteTimeout:    util.Pointer(30 * time.Second),
-		CacheDialTimeout:     util.Pointer(30 * time.Second),
-		WorkerConcurrency:    util.Pointer(4 * runtime.GOMAXPROCS(-1)),
-		WorkerStrictPriority: util.Pointer(false),
-		WorkerStopTimeout:    util.Pointer(30 * time.Second),
-		WorkerTimeZone:       time.UTC,
+		Concurrency:       util.Pointer(4 * runtime.GOMAXPROCS(-1)),
+		StrictPriority:    util.Pointer(false),
+		StopTimeout:       util.Pointer(30 * time.Second),
+		TimeZone:          time.UTC,
+		CacheMaxConns:     util.Pointer(max(8, 4*runtime.GOMAXPROCS(-1))),
+		CacheReadTimeout:  util.Pointer(30 * time.Second),
+		CacheWriteTimeout: util.Pointer(30 * time.Second),
+		CacheDialTimeout:  util.Pointer(30 * time.Second),
 	}
 )
 
 type WorkerConfig struct {
-	CacheHost            string
-	CachePort            int
-	CacheSSLMode         bool
-	CachePassword        string
-	CacheMaxConns        *int
-	CacheReadTimeout     *time.Duration
-	CacheWriteTimeout    *time.Duration
-	CacheDialTimeout     *time.Duration
-	WorkerQueues         map[string]int
-	WorkerConcurrency    *int
-	WorkerStrictPriority *bool
-	WorkerStopTimeout    *time.Duration
-	WorkerTimeZone       *time.Location
+	Queues            map[string]int
+	Concurrency       *int
+	StrictPriority    *bool
+	StopTimeout       *time.Duration
+	TimeZone          *time.Location
+	CacheHost         string
+	CachePort         int
+	CacheSSLMode      bool
+	CachePassword     string
+	CacheMaxConns     *int
+	CacheReadTimeout  *time.Duration
+	CacheWriteTimeout *time.Duration
+	CacheDialTimeout  *time.Duration
 }
 
 type Worker struct {
@@ -96,17 +96,17 @@ func NewWorker(observer Observer, config WorkerConfig) *Worker {
 	asynqErrorHandler := _newAsynqErrorHandler(&observer)
 
 	serverConfig := asynq.Config{
-		Concurrency:     *config.WorkerConcurrency,
-		Queues:          config.WorkerQueues,
-		StrictPriority:  *config.WorkerStrictPriority,
-		ShutdownTimeout: *config.WorkerStopTimeout,
+		Concurrency:     *config.Concurrency,
+		Queues:          config.Queues,
+		StrictPriority:  *config.StrictPriority,
+		ShutdownTimeout: *config.StopTimeout,
 		Logger:          asynqLogger,
 		LogLevel:        asynqLogLevel,
 		ErrorHandler:    asynq.ErrorHandlerFunc(asynqErrorHandler.HandleProcessError),
 	}
 
 	schedulerConfig := asynq.SchedulerOpts{
-		Location: config.WorkerTimeZone,
+		Location: config.TimeZone,
 		Logger:   asynqLogger,
 		LogLevel: asynqLogLevel,
 		PostEnqueueFunc: func(info *asynq.TaskInfo, err error) {
@@ -128,7 +128,7 @@ func NewWorker(observer Observer, config WorkerConfig) *Worker {
 }
 
 func (self *Worker) Run(ctx context.Context) error {
-	self.observer.Infof(ctx, "Worker started with queues %v", self.config.WorkerQueues)
+	self.observer.Infof(ctx, "Worker started with queues %v", self.config.Queues)
 
 	err := self.server.Start(self.register)
 	if err != nil && err != asynq.ErrServerClosed {

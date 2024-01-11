@@ -18,7 +18,7 @@ var (
 		RequestHeaderMaxSize:     util.Pointer(1 << 10), // 1 KB
 		RequestBodyMaxSize:       util.Pointer(4 << 10), // 4 KB
 		RequestFileMaxSize:       util.Pointer(2 << 20), // 2 MB
-		RequestFilePathPattern:   util.Pointer(`.*/file.*`),
+		RequestFilePattern:       util.Pointer(`.*/file.*`),
 		RequestKeepAliveTimeout:  util.Pointer(30 * time.Second),
 		RequestReadTimeout:       util.Pointer(30 * time.Second),
 		RequestReadHeaderTimeout: util.Pointer(30 * time.Second),
@@ -29,11 +29,11 @@ var (
 
 type ServerConfig struct {
 	Environment              Environment
-	AppPort                  int
+	Port                     int
 	RequestHeaderMaxSize     *int
 	RequestBodyMaxSize       *int
 	RequestFileMaxSize       *int
-	RequestFilePathPattern   *string
+	RequestFilePattern       *string
 	RequestKeepAliveTimeout  *time.Duration
 	RequestReadTimeout       *time.Duration
 	RequestReadHeaderTimeout *time.Duration
@@ -72,10 +72,10 @@ func NewServer(observer Observer, serializer Serializer, binder Binder,
 	server.HTTPErrorHandler = exceptionHandler.Handle
 	server.IPExtractor = *config.RequestIPExtractor
 
-	requestFilePathPattern := regexp.MustCompile(*config.RequestFilePathPattern)
+	requestFilePattern := regexp.MustCompile(*config.RequestFilePattern)
 	server.Pre(echoMiddleware.BodyLimitWithConfig(echoMiddleware.BodyLimitConfig{
 		Skipper: func(ctx echo.Context) bool {
-			return requestFilePathPattern.MatchString(ctx.Request().RequestURI)
+			return requestFilePattern.MatchString(ctx.Request().RequestURI)
 		},
 		Limit: util.ByteSize(*config.RequestBodyMaxSize),
 	}))
@@ -99,9 +99,9 @@ func NewServer(observer Observer, serializer Serializer, binder Binder,
 }
 
 func (self *Server) Run(ctx context.Context) error {
-	self.observer.Infof(ctx, "Server started at port %d", self.config.AppPort)
+	self.observer.Infof(ctx, "Server started at port %d", self.config.Port)
 
-	err := self.server.Start(fmt.Sprintf(":%d", self.config.AppPort))
+	err := self.server.Start(fmt.Sprintf(":%d", self.config.Port))
 	if err != nil && err != http.ErrServerClosed {
 		return ErrServerGeneric().Wrap(err)
 	}

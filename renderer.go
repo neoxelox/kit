@@ -16,14 +16,14 @@ import (
 
 var (
 	_RENDERER_DEFAULT_CONFIG = RendererConfig{
-		TemplatesPath:            util.Pointer("./templates"),
-		TemplateExtensionPattern: util.Pointer(`^.*\.(html|txt|md)$`),
+		TemplatesPath:       util.Pointer("./templates"),
+		TemplateFilePattern: util.Pointer(`^.*\.(html|txt|md)$`),
 	}
 )
 
 type RendererConfig struct {
-	TemplatesPath            *string
-	TemplateExtensionPattern *string
+	TemplatesPath       *string
+	TemplateFilePattern *string
 }
 
 type Renderer struct {
@@ -37,7 +37,7 @@ func NewRenderer(observer Observer, config RendererConfig) (*Renderer, error) {
 
 	*config.TemplatesPath = filepath.Clean(*config.TemplatesPath)
 
-	extensions := regexp.MustCompile(*config.TemplateExtensionPattern)
+	extensions := regexp.MustCompile(*config.TemplateFilePattern)
 
 	renderer := template.New("")
 

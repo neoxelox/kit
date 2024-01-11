@@ -17,7 +17,7 @@ import (
 const (
 	_LOGGER_LEVEL_FIELD_NAME       = "level"
 	_LOGGER_MESSAGE_FIELD_NAME     = "message"
-	_LOGGER_APP_FIELD_NAME         = "app"
+	_LOGGER_SERVICE_FIELD_NAME     = "service"
 	_LOGGER_TIMESTAMP_FIELD_NAME   = "timestamp"
 	_LOGGER_TIMESTAMP_FIELD_FORMAT = zerolog.TimeFormatUnix
 	_LOGGER_CALLER_FIELD_NAME      = "caller"
@@ -42,8 +42,8 @@ var (
 )
 
 type LoggerConfig struct {
-	AppName        string
 	Level          Level
+	Service        string
 	SkipFrameCount *int
 }
 
@@ -72,14 +72,14 @@ func NewLogger(config LoggerConfig) *Logger {
 	out := diode.NewWriter(os.Stdout, _LOGGER_WRITER_SIZE, _LOGGER_POLL_INTERVAL, func(missed int) {
 		fmt.Fprintf(os.Stdout,
 			"{\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":\"%s:%d\",\"%s\":%d,\"%s\":\"Logger dropped %d messages\"}\n",
-			zerolog.LevelFieldName, zerolog.ErrorLevel, _LOGGER_APP_FIELD_NAME,
-			config.AppName, zerolog.CallerFieldName, file, line, zerolog.TimestampFieldName,
+			zerolog.LevelFieldName, zerolog.ErrorLevel, _LOGGER_SERVICE_FIELD_NAME,
+			config.Service, zerolog.CallerFieldName, file, line, zerolog.TimestampFieldName,
 			time.Now().Unix(), zerolog.MessageFieldName, missed)
 	})
 
 	// Do not use Caller hook as runtime.Caller makes the logger up to 2.6x slower
 	logger := zerolog.New(out).With().
-		Str(_LOGGER_APP_FIELD_NAME, config.AppName).
+		Str(_LOGGER_SERVICE_FIELD_NAME, config.Service).
 		Timestamp().
 		Logger().
 		Level(_KlevelToZlevel[config.Level])
@@ -89,7 +89,7 @@ func NewLogger(config LoggerConfig) *Logger {
 		config:         config,
 		level:          config.Level,
 		out:            &out,
-		prefix:         config.AppName,
+		prefix:         config.Service,
 		header:         "",
 		verbose:        LvlDebug >= config.Level,
 		skipFrameCount: *config.SkipFrameCount,
