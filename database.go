@@ -28,7 +28,6 @@ var (
 	_DATABASE_DEFAULT_MAX_CONN_LIFE_TIME      = 1 * time.Hour
 	_DATABASE_DEFAULT_DIAL_TIMEOUT            = 30 * time.Second
 	_DATABASE_DEFAULT_STATEMENT_TIMEOUT       = 30 * time.Second
-	_DATABASE_DEFAULT_LOCK_TIMEOUT            = 30 * time.Second
 	_DATABASE_DEFAULT_DEFAULT_ISOLATION_LEVEL = IsoLvlReadCommitted
 	_DATABASE_DEFAULT_RETRY_ATTEMPTS          = 1
 	_DATABASE_DEFAULT_RETRY_INITIAL_DELAY     = 0 * time.Second
@@ -81,7 +80,6 @@ type DatabaseConfig struct {
 	DatabaseMaxConnLifeTime       *time.Duration
 	DatabaseDialTimeout           *time.Duration
 	DatabaseStatementTimeout      *time.Duration
-	DatabaseLockTimeout           *time.Duration
 	DatabaseDefaultIsolationLevel *IsolationLevel
 }
 
@@ -115,10 +113,6 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig,
 
 	if config.DatabaseStatementTimeout == nil {
 		config.DatabaseStatementTimeout = util.Pointer(_DATABASE_DEFAULT_STATEMENT_TIMEOUT)
-	}
-
-	if config.DatabaseLockTimeout == nil {
-		config.DatabaseLockTimeout = util.Pointer(_DATABASE_DEFAULT_LOCK_TIMEOUT)
 	}
 
 	if config.DatabaseDefaultIsolationLevel == nil {
@@ -157,7 +151,7 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig,
 	poolConfig.ConnConfig.RuntimeParams["application_name"] = config.AppName
 	poolConfig.ConnConfig.RuntimeParams["default_transaction_isolation"] = string(_KisoLevelToPisoLevel[*config.DatabaseDefaultIsolationLevel])
 	poolConfig.ConnConfig.RuntimeParams["statement_timeout"] = strconv.Itoa(int(config.DatabaseStatementTimeout.Milliseconds()))
-	poolConfig.ConnConfig.RuntimeParams["lock_timeout"] = strconv.Itoa(int(config.DatabaseLockTimeout.Milliseconds()))
+	poolConfig.ConnConfig.RuntimeParams["lock_timeout"] = strconv.Itoa(int(config.DatabaseStatementTimeout.Milliseconds()))
 
 	pgxLogger := _newPgxLogger(&observer)
 	pgxLogLevel := _KlevelToPlevel[pgxLogger.observer.Level()]
