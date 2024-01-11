@@ -38,7 +38,7 @@ var _KlevelToPlevel = map[Level]pgx.LogLevel{
 var (
 	_DATABASE_DEFAULT_CONFIG = DatabaseConfig{
 		DatabaseMinConns:              util.Pointer(1),
-		DatabaseMaxConns:              util.Pointer(1 * runtime.GOMAXPROCS(-1)),
+		DatabaseMaxConns:              util.Pointer(max(4, 2*runtime.GOMAXPROCS(-1))),
 		DatabaseMaxConnIdleTime:       util.Pointer(30 * time.Minute),
 		DatabaseMaxConnLifeTime:       util.Pointer(1 * time.Hour),
 		DatabaseDialTimeout:           util.Pointer(30 * time.Second),

@@ -21,7 +21,7 @@ const (
 
 var (
 	_ENQUEUER_DEFAULT_CONFIG = EnqueuerConfig{
-		CacheMaxConns:     util.Pointer(10 * runtime.GOMAXPROCS(-1)),
+		CacheMaxConns:     util.Pointer(max(8, 4*runtime.GOMAXPROCS(-1))),
 		CacheReadTimeout:  util.Pointer(30 * time.Second),
 		CacheWriteTimeout: util.Pointer(30 * time.Second),
 		CacheDialTimeout:  util.Pointer(30 * time.Second),

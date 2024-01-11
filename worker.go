@@ -28,11 +28,11 @@ var _KlevelToAlevel = map[Level]asynq.LogLevel{
 
 var (
 	_WORKER_DEFAULT_CONFIG = WorkerConfig{
-		CacheMaxConns:        util.Pointer(10 * runtime.GOMAXPROCS(-1)),
+		CacheMaxConns:        util.Pointer(max(8, 4*runtime.GOMAXPROCS(-1))),
 		CacheReadTimeout:     util.Pointer(30 * time.Second),
 		CacheWriteTimeout:    util.Pointer(30 * time.Second),
 		CacheDialTimeout:     util.Pointer(30 * time.Second),
-		WorkerConcurrency:    util.Pointer(1 * runtime.GOMAXPROCS(-1)),
+		WorkerConcurrency:    util.Pointer(4 * runtime.GOMAXPROCS(-1)),
 		WorkerStrictPriority: util.Pointer(false),
 		WorkerStopTimeout:    util.Pointer(30 * time.Second),
 		WorkerTimeZone:       time.UTC,

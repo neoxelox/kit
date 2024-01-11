@@ -19,7 +19,7 @@ const (
 var (
 	_CACHE_DEFAULT_CONFIG = CacheConfig{
 		CacheMinConns:        util.Pointer(1),
-		CacheMaxConns:        util.Pointer(10 * runtime.GOMAXPROCS(-1)),
+		CacheMaxConns:        util.Pointer(max(8, 4*runtime.GOMAXPROCS(-1))),
 		CacheMaxConnIdleTime: util.Pointer(30 * time.Minute),
 		CacheMaxConnLifeTime: util.Pointer(1 * time.Hour),
 		CacheReadTimeout:     util.Pointer(30 * time.Second),
