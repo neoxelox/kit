@@ -15,6 +15,8 @@ import (
 	"github.com/neoxelox/kit/util"
 )
 
+// TODO: enhance rendering with templ
+
 var (
 	ErrRendererGeneric = errors.New("renderer failed")
 )
