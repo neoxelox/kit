@@ -51,12 +51,12 @@ type SecureConfig struct {
 
 type Secure struct {
 	config           SecureConfig
-	observer         kit.Observer
+	observer         *kit.Observer
 	corsMiddleware   echo.MiddlewareFunc
 	secureMiddleware echo.MiddlewareFunc
 }
 
-func NewSecure(observer kit.Observer, config SecureConfig) *Secure {
+func NewSecure(observer *kit.Observer, config SecureConfig) *Secure {
 	util.Merge(&config, _SECURE_MIDDLEWARE_DEFAULT_CONFIG)
 
 	*config.CORSAllowOrigins = strset.New(*config.CORSAllowOrigins...).List()

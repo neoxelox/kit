@@ -10,6 +10,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/hibiken/asynq"
+	"github.com/neoxelox/errors"
 
 	"github.com/neoxelox/kit/util"
 )
@@ -17,6 +18,11 @@ import (
 const (
 	_ENQUEUER_REDIS_DSN            = "%s:%d"
 	_ENQUEUER_TASK_TRACE_ID_HEADER = "x_trace_id"
+)
+
+var (
+	ErrEnqueuerGeneric  = errors.New("enqueuer failed")
+	ErrEnqueuerTimedOut = errors.New("enqueuer timed out")
 )
 
 var (
@@ -41,11 +47,11 @@ type EnqueuerConfig struct {
 
 type Enqueuer struct {
 	config   EnqueuerConfig
-	observer Observer
-	client   asynq.Client
+	observer *Observer
+	client   *asynq.Client
 }
 
-func NewEnqueuer(observer Observer, config EnqueuerConfig) *Enqueuer {
+func NewEnqueuer(observer *Observer, config EnqueuerConfig) *Enqueuer {
 	util.Merge(&config, _ENQUEUER_DEFAULT_CONFIG)
 
 	dsn := fmt.Sprintf(_ENQUEUER_REDIS_DSN, config.CacheHost, config.CachePort)
@@ -70,7 +76,7 @@ func NewEnqueuer(observer Observer, config EnqueuerConfig) *Enqueuer {
 	return &Enqueuer{
 		config:   config,
 		observer: observer,
-		client:   *asynq.NewClient(redisConfig),
+		client:   asynq.NewClient(redisConfig),
 	}
 }
 
@@ -80,14 +86,14 @@ func (self *Enqueuer) Enqueue(ctx context.Context, task string, params any, opti
 
 	payload, err := json.Marshal(params)
 	if err != nil {
-		return ErrEnqueuerGeneric().Wrap(err)
+		return ErrEnqueuerGeneric.Raise().Cause(err)
 	}
 
 	var data map[string]any
 
 	err = json.Unmarshal(payload, &data)
 	if err != nil {
-		return ErrEnqueuerGeneric().Wrap(err)
+		return ErrEnqueuerGeneric.Raise().Cause(err)
 	}
 
 	data[_ENQUEUER_TASK_TRACE_ID_HEADER] = traceID
@@ -97,12 +103,12 @@ func (self *Enqueuer) Enqueue(ctx context.Context, task string, params any, opti
 
 	payload, err = json.Marshal(data)
 	if err != nil {
-		return ErrEnqueuerGeneric().Wrap(err)
+		return ErrEnqueuerGeneric.Raise().Cause(err)
 	}
 
 	info, err := self.client.EnqueueContext(ctx, asynq.NewTask(task, payload), options...)
 	if err != nil {
-		return ErrEnqueuerGeneric().Wrap(err)
+		return ErrEnqueuerGeneric.Raise().Cause(err)
 	}
 
 	self.observer.Infof(
@@ -117,19 +123,20 @@ func (self *Enqueuer) Close(ctx context.Context) error {
 
 		err := self.client.Close()
 		if err != nil {
-			return ErrEnqueuerGeneric().WrapAs(err)
+			return ErrEnqueuerGeneric.Raise().Cause(err)
 		}
 
 		self.observer.Info(ctx, "Closed enqueuer")
 
 		return nil
 	})
-	switch {
-	case err == nil:
-		return nil
-	case util.ErrDeadlineExceeded.Is(err):
-		return ErrEnqueuerTimedOut()
-	default:
-		return ErrEnqueuerGeneric().Wrap(err)
+	if err != nil {
+		if util.ErrDeadlineExceeded.Is(err) {
+			return ErrEnqueuerTimedOut.Raise().Cause(err)
+		}
+
+		return err
 	}
+
+	return nil
 }

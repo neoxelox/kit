@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/neoxelox/errors"
 	"golang.org/x/text/language"
 	"gopkg.in/yaml.v3"
 
@@ -16,6 +17,14 @@ import (
 )
 
 // TODO: enhance localization with go-i18n, go-localize or spreak
+
+var (
+	KeyLocalizerLocale Key = KeyBase + "localizer:locale"
+)
+
+var (
+	ErrLocalizerGeneric = errors.New("localizer failed")
+)
 
 var (
 	_LOCALIZER_DEFAULT_CONFIG = LocalizerConfig{
@@ -32,21 +41,21 @@ type LocalizerConfig struct {
 
 type Localizer struct {
 	config     LocalizerConfig
-	observer   Observer
-	copies     *map[language.Tag]map[string]string
+	observer   *Observer
+	copies     map[language.Tag]map[string]string
 	extensions *regexp.Regexp
 }
 
-func NewLocalizer(observer Observer, config LocalizerConfig) (*Localizer, error) {
+func NewLocalizer(observer *Observer, config LocalizerConfig) (*Localizer, error) {
 	util.Merge(&config, _LOCALIZER_DEFAULT_CONFIG)
 
 	*config.LocalesPath = filepath.Clean(*config.LocalesPath)
 
 	extensions := regexp.MustCompile(*config.LocaleFilePattern)
 
-	copiesByLang, err := _getCopies(&observer, *config.LocalesPath, extensions)
+	copiesByLang, err := _getCopies(observer, *config.LocalesPath, extensions)
 	if err != nil {
-		return nil, ErrLocalizerGeneric().Wrap(err)
+		return nil, err
 	}
 
 	return &Localizer{
@@ -57,39 +66,37 @@ func NewLocalizer(observer Observer, config LocalizerConfig) (*Localizer, error)
 	}, nil
 }
 
-func _getCopies(
-	observer *Observer, localesPath string,
-	localeExtensions *regexp.Regexp) (*map[language.Tag]map[string]string, error) {
+func _getCopies(observer *Observer, path string, extensions *regexp.Regexp) (map[language.Tag]map[string]string, error) {
 	copiesByLang := make(map[language.Tag]map[string]string)
 
-	err := filepath.WalkDir(localesPath, func(path string, info fs.DirEntry, err error) error {
+	err := filepath.WalkDir(path, func(path string, info fs.DirEntry, err error) error {
 		if err != nil {
-			return ErrLocalizerGeneric().WrapAs(err)
+			return ErrLocalizerGeneric.Raise().Cause(err)
 		}
 
 		if info.IsDir() {
 			return nil
 		}
 
-		if !localeExtensions.MatchString(info.Name()) {
+		if !extensions.MatchString(info.Name()) {
 			return nil
 		}
 
 		lang, err := language.Parse(info.Name()[:len(info.Name())-len(filepath.Ext(info.Name()))])
 		if err != nil {
-			return nil // nolint
+			return ErrLocalizerGeneric.Raise().Cause(err)
 		}
 
 		file, err := ioutil.ReadFile(path)
 		if err != nil {
-			return ErrLocalizerGeneric().WrapAs(err)
+			return ErrLocalizerGeneric.Raise().Cause(err)
 		}
 
 		copies := make(map[string]string)
 
 		err = yaml.Unmarshal(file, &copies)
 		if err != nil {
-			return ErrLocalizerGeneric().WrapAs(err)
+			return ErrLocalizerGeneric.Raise().Cause(err)
 		}
 
 		copiesByLang[lang] = copies
@@ -97,14 +104,14 @@ func _getCopies(
 		return nil
 	})
 	if err != nil {
-		return nil, ErrLocalizerGeneric().Wrap(err)
+		return nil, err
 	}
 
 	locales := len(copiesByLang)
 
 	if locales < 1 {
 		observer.Info(context.Background(), "No locales loaded")
-		return &copiesByLang, nil
+		return copiesByLang, nil
 	}
 
 	langs := make([]string, 0, locales)
@@ -114,13 +121,13 @@ func _getCopies(
 
 	observer.Infof(context.Background(), "Loaded %d locales: %v", locales, strings.Join(langs, ", "))
 
-	return &copiesByLang, nil
+	return copiesByLang, nil
 }
 
 func (self *Localizer) Refresh() error {
-	copiesByLang, err := _getCopies(&self.observer, *self.config.LocalesPath, self.extensions)
+	copiesByLang, err := _getCopies(self.observer, *self.config.LocalesPath, self.extensions)
 	if err != nil {
-		return ErrLocalizerGeneric().Wrap(err)
+		return err
 	}
 
 	self.copies = copiesByLang
@@ -140,14 +147,14 @@ func (self Localizer) GetLocale(ctx context.Context) language.Tag {
 	return self.config.DefaultLocale
 }
 
-func (self Localizer) Localize(ctx context.Context, copy string, i ...any) string { // nolint
-	copy = strings.ToUpper(copy) // nolint
+func (self Localizer) Localize(ctx context.Context, copy string, i ...any) string {
+	copy = strings.ToUpper(copy)
 
-	if trans, ok := (*self.copies)[self.GetLocale(ctx)][copy]; ok {
+	if trans, ok := self.copies[self.GetLocale(ctx)][copy]; ok {
 		return fmt.Sprintf(trans, i...)
 	}
 
-	if trans, ok := (*self.copies)[self.config.DefaultLocale][copy]; ok {
+	if trans, ok := self.copies[self.config.DefaultLocale][copy]; ok {
 		return fmt.Sprintf(trans, i...)
 	}
 

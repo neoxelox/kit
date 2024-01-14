@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -21,10 +20,10 @@ type RecoverConfig struct {
 
 type Recover struct {
 	config   RecoverConfig
-	observer kit.Observer
+	observer *kit.Observer
 }
 
-func NewRecover(observer kit.Observer, config RecoverConfig) *Recover {
+func NewRecover(observer *kit.Observer, config RecoverConfig) *Recover {
 	util.Merge(&config, _RECOVER_MIDDLEWARE_DEFAULT_CONFIG)
 
 	return &Recover{
@@ -40,14 +39,14 @@ func (self *Recover) Handle(next echo.HandlerFunc) echo.HandlerFunc {
 			if rec != nil {
 				err, ok := rec.(error)
 				if !ok {
-					err = kit.ErrServerGeneric().With(fmt.Sprint(rec))
+					err = kit.ErrServerGeneric.Raise().With("%v", rec)
 				}
 
 				if err == http.ErrAbortHandler {
 					panic(err)
 				}
 
-				// Handle, serialize and write panic exception response
+				// Pass error to the error handler to serialize and write error response
 				ctx.Error(err)
 			}
 		}()

@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/neoxelox/errors"
+
 	"github.com/go-redis/cache/v8"
 	"github.com/go-redis/redis/v8"
 	"github.com/neoxelox/kit/util"
@@ -14,6 +16,13 @@ import (
 
 const (
 	_CACHE_REDIS_DSN = "%s:%d"
+)
+
+var (
+	ErrCacheGeneric   = errors.New("cache failed")
+	ErrCacheTimedOut  = errors.New("cache timed out")
+	ErrCacheUnhealthy = errors.New("cache unhealthy")
+	ErrCacheMiss      = errors.New("cache key not found")
 )
 
 var (
@@ -51,16 +60,16 @@ type CacheConfig struct {
 
 type Cache struct {
 	config   CacheConfig
-	observer Observer
+	observer *Observer
 	pool     *redis.Client
 	cache    *cache.Cache
 }
 
-func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry ...RetryConfig) (*Cache, error) {
+func NewCache(ctx context.Context, observer *Observer, config CacheConfig, retry ...RetryConfig) (*Cache, error) {
 	util.Merge(&config, _CACHE_DEFAULT_CONFIG)
 	_retry := util.Optional(retry, _CACHE_DEFAULT_RETRY_CONFIG)
 
-	redis.SetLogger(_newRedisLogger(&observer))
+	redis.SetLogger(_newRedisLogger(observer))
 
 	dsn := fmt.Sprintf(_CACHE_REDIS_DSN, config.Host, config.Port)
 
@@ -91,7 +100,7 @@ func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry 
 		return util.ExponentialRetry(
 			_retry.Attempts, _retry.InitialDelay, _retry.LimitDelay,
 			_retry.Retriables, func(attempt int) error {
-				var err error // nolint
+				var err error
 
 				observer.Infof(ctx, "Trying to connect to the cache %d/%d", attempt, _retry.Attempts)
 
@@ -99,18 +108,18 @@ func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry 
 
 				err = pool.Ping(ctx).Err()
 				if err != nil {
-					return ErrCacheGeneric().WrapAs(err)
+					return ErrCacheGeneric.Raise().Cause(err)
 				}
 
 				return nil
 			})
 	})
-	switch {
-	case err == nil:
-	case util.ErrDeadlineExceeded.Is(err):
-		return nil, ErrCacheTimedOut()
-	default:
-		return nil, ErrCacheGeneric().Wrap(err)
+	if err != nil {
+		if util.ErrDeadlineExceeded.Is(err) {
+			return nil, ErrCacheTimedOut.Raise().Cause(err)
+		}
+
+		return nil, err
 	}
 
 	observer.Info(ctx, "Connected to the cache")
@@ -133,42 +142,43 @@ func (self *Cache) Health(ctx context.Context) error {
 	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		currentConns := self.pool.PoolStats().TotalConns
 		if currentConns < uint32(*self.config.MinConns) {
-			return ErrCacheUnhealthy().Withf("current conns %d below minimum %d",
+			return ErrCacheUnhealthy.Raise().With("current conns %d below minimum %d",
 				currentConns, *self.config.MinConns)
 		}
 
 		result, err := self.pool.Ping(ctx).Result()
 		if err != nil || result != "PONG" {
-			return ErrCacheUnhealthy().WrapAs(err)
+			return ErrCacheUnhealthy.Raise().Cause(err)
 		}
 
 		err = ctx.Err()
 		if err != nil {
-			return ErrCacheUnhealthy().WrapAs(err)
+			return ErrCacheUnhealthy.Raise().Cause(err)
 		}
 
 		return nil
 	})
-	switch {
-	case err == nil:
-		return nil
-	case util.ErrDeadlineExceeded.Is(err):
-		return ErrCacheTimedOut()
-	default:
-		return ErrCacheGeneric().Wrap(err)
+	if err != nil {
+		if util.ErrDeadlineExceeded.Is(err) {
+			return ErrCacheTimedOut.Raise().Cause(err)
+		}
+
+		return err
 	}
+
+	return nil
 }
 
-func _chErrToError(err error) *Error {
+func _chErrToError(err error) *errors.Error {
 	if err == nil {
 		return nil
 	}
 
 	switch err {
 	case cache.ErrCacheMiss:
-		return ErrCacheMiss().WrapWithDepth(1, err)
+		return ErrCacheMiss.Raise().Skip(1).Cause(err)
 	default:
-		return ErrCacheGeneric().WrapWithDepth(1, err)
+		return ErrCacheGeneric.Raise().Skip(1).Cause(err)
 	}
 }
 
@@ -215,21 +225,22 @@ func (self *Cache) Close(ctx context.Context) error {
 
 		err := self.pool.Close()
 		if err != nil {
-			return ErrCacheGeneric().WrapAs(err)
+			return ErrCacheGeneric.Raise().Cause(err)
 		}
 
 		self.observer.Info(ctx, "Closed cache")
 
 		return nil
 	})
-	switch {
-	case err == nil:
-		return nil
-	case util.ErrDeadlineExceeded.Is(err):
-		return ErrCacheTimedOut()
-	default:
-		return ErrCacheGeneric().Wrap(err)
+	if err != nil {
+		if util.ErrDeadlineExceeded.Is(err) {
+			return ErrCacheTimedOut.Raise().Cause(err)
+		}
+
+		return err
 	}
+
+	return nil
 }
 
 type _redisLogger struct {
@@ -242,6 +253,6 @@ func _newRedisLogger(observer *Observer) *_redisLogger {
 	}
 }
 
-func (self _redisLogger) Printf(ctx context.Context, format string, v ...any) { // nolint
+func (self _redisLogger) Printf(ctx context.Context, format string, v ...any) {
 	self.observer.Infof(ctx, format, v...)
 }

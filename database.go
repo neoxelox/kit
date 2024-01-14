@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/leporo/sqlf"
+	"github.com/neoxelox/errors"
 	"github.com/randallmlough/pgxscan"
 
 	"github.com/neoxelox/kit/util"
@@ -24,6 +25,17 @@ const (
 
 var (
 	_DATABASE_ERR_PGCODE = regexp.MustCompile(`\(SQLSTATE (.*)\)`)
+
+	KeyDatabaseTransaction Key = KeyBase + "database:transaction"
+)
+
+var (
+	ErrDatabaseGeneric            = errors.New("database failed")
+	ErrDatabaseTimedOut           = errors.New("database timed out")
+	ErrDatabaseUnhealthy          = errors.New("database unhealthy")
+	ErrDatabaseTransactionFailed  = errors.New("database transaction failed")
+	ErrDatabaseNoRows             = errors.New("database no rows in result set")
+	ErrDatabaseIntegrityViolation = errors.New("database integrity constraint violation")
 )
 
 var _KlevelToPlevel = map[Level]pgx.LogLevel{
@@ -89,11 +101,11 @@ type DatabaseConfig struct {
 
 type Database struct {
 	config   DatabaseConfig
-	observer Observer
+	observer *Observer
 	pool     *pgxpool.Pool
 }
 
-func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig,
+func NewDatabase(ctx context.Context, observer *Observer, config DatabaseConfig,
 	retry ...RetryConfig) (*Database, error) {
 	util.Merge(&config, _DATABASE_DEFAULT_CONFIG)
 	_retry := util.Optional(retry, _DATABASE_DEFAULT_RETRY_CONFIG)
@@ -110,7 +122,7 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig,
 
 	poolConfig, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
-		return nil, ErrDatabaseGeneric().Wrap(err)
+		return nil, ErrDatabaseGeneric.Raise().Cause(err)
 	}
 
 	poolConfig.MinConns = int32(*config.MinConns)
@@ -124,7 +136,7 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig,
 	poolConfig.ConnConfig.RuntimeParams["statement_timeout"] = strconv.Itoa(int(config.StatementTimeout.Milliseconds()))
 	poolConfig.ConnConfig.RuntimeParams["lock_timeout"] = strconv.Itoa(int(config.StatementTimeout.Milliseconds()))
 
-	pgxLogger := _newPgxLogger(&observer)
+	pgxLogger := _newPgxLogger(observer)
 	pgxLogLevel := _KlevelToPlevel[pgxLogger.observer.Level()]
 
 	// PGX Info level is too much! (PGX levels are reversed)
@@ -141,30 +153,30 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig,
 		return util.ExponentialRetry(
 			_retry.Attempts, _retry.InitialDelay, _retry.LimitDelay,
 			_retry.Retriables, func(attempt int) error {
-				var err error // nolint
+				var err error
 
 				observer.Infof(ctx, "Trying to connect to the %s database %d/%d",
 					config.Database, attempt, _retry.Attempts)
 
 				pool, err = pgxpool.ConnectConfig(ctx, poolConfig)
 				if err != nil {
-					return ErrDatabaseGeneric().WrapAs(err)
+					return ErrDatabaseGeneric.Raise().Cause(err)
 				}
 
 				err = pool.Ping(ctx)
 				if err != nil {
-					return ErrDatabaseGeneric().WrapAs(err)
+					return ErrDatabaseGeneric.Raise().Cause(err)
 				}
 
 				return nil
 			})
 	})
-	switch {
-	case err == nil:
-	case util.ErrDeadlineExceeded.Is(err):
-		return nil, ErrDatabaseTimedOut()
-	default:
-		return nil, ErrDatabaseGeneric().Wrap(err)
+	if err != nil {
+		if util.ErrDeadlineExceeded.Is(err) {
+			return nil, ErrDatabaseTimedOut.Raise().Cause(err)
+		}
+
+		return nil, err
 	}
 
 	observer.Infof(ctx, "Connected to the %s database", config.Database)
@@ -182,33 +194,34 @@ func (self *Database) Health(ctx context.Context) error {
 	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		currentConns := self.pool.Stat().TotalConns()
 		if currentConns < int32(*self.config.MinConns) {
-			return ErrDatabaseUnhealthy().Withf("current conns %d below minimum %d",
+			return ErrDatabaseUnhealthy.Raise().With("current conns %d below minimum %d",
 				currentConns, *self.config.MinConns)
 		}
 
 		err := self.pool.Ping(ctx)
 		if err != nil {
-			return ErrDatabaseUnhealthy().WrapAs(err)
+			return ErrDatabaseUnhealthy.Raise().Cause(err)
 		}
 
 		err = ctx.Err()
 		if err != nil {
-			return ErrDatabaseUnhealthy().WrapAs(err)
+			return ErrDatabaseUnhealthy.Raise().Cause(err)
 		}
 
 		return nil
 	})
-	switch {
-	case err == nil:
-		return nil
-	case util.ErrDeadlineExceeded.Is(err):
-		return ErrDatabaseTimedOut()
-	default:
-		return ErrDatabaseGeneric().Wrap(err)
+	if err != nil {
+		if util.ErrDeadlineExceeded.Is(err) {
+			return ErrDatabaseTimedOut.Raise().Cause(err)
+		}
+
+		return err
 	}
+
+	return nil
 }
 
-func _dbErrToError(err error) *Error {
+func _dbErrToError(err error) *errors.Error {
 	if err == nil {
 		return nil
 	}
@@ -218,15 +231,15 @@ func _dbErrToError(err error) *Error {
 		case pgerrcode.IntegrityConstraintViolation, pgerrcode.RestrictViolation, pgerrcode.NotNullViolation,
 			pgerrcode.ForeignKeyViolation, pgerrcode.UniqueViolation, pgerrcode.CheckViolation,
 			pgerrcode.ExclusionViolation:
-			return ErrDatabaseIntegrityViolation().WrapWithDepth(1, err)
+			return ErrDatabaseIntegrityViolation.Raise().Skip(1).Cause(err)
 		}
 	}
 
-	switch err.Error() {
-	case pgx.ErrNoRows.Error():
-		return ErrDatabaseNoRows().WrapWithDepth(1, err)
+	switch err {
+	case pgx.ErrNoRows:
+		return ErrDatabaseNoRows.Raise().Skip(1).Cause(err)
 	default:
-		return ErrDatabaseGeneric().WrapWithDepth(1, err)
+		return ErrDatabaseGeneric.Raise().Skip(1).Cause(err)
 	}
 }
 
@@ -304,7 +317,8 @@ func (self *Database) Transaction(ctx context.Context, level *IsolationLevel, fn
 	if ctx.Value(KeyDatabaseTransaction) != nil {
 		err := fn(ctx)
 		if err != nil {
-			return ErrDatabaseTransactionFailed().WrapAs(err)
+			// Wait to rollback context transaction at the original Transaction call
+			return ErrDatabaseTransactionFailed.Raise().Cause(err)
 		}
 
 		return nil
@@ -315,44 +329,53 @@ func (self *Database) Transaction(ctx context.Context, level *IsolationLevel, fn
 		AccessMode: pgx.ReadWrite,
 	})
 	if err != nil {
-		return ErrDatabaseTransactionFailed().Wrap(err)
+		// Don't rollback transaction because it was not created
+		return ErrDatabaseTransactionFailed.Raise().Cause(err)
 	}
 
 	err = ctx.Err()
 	if err != nil {
-		return ErrDatabaseTransactionFailed().Wrap(err)
+		errT := transaction.Rollback(ctx)
+		return ErrDatabaseTransactionFailed.Raise().Extra(map[string]any{"transaction_error": errT}).Cause(err)
 	}
 
 	defer func() {
-		err := recover()
-		if err != nil {
-			_ = transaction.Rollback(ctx) // TODO: Combine error
-			panic(err)
+		rec := recover()
+		if rec != nil {
+			errT := transaction.Rollback(ctx)
+
+			err, ok := rec.(error)
+			if !ok {
+				err = ErrDatabaseGeneric.Raise().With("%v", rec)
+			}
+
+			// Repanic so upwards middlewares are aware of it
+			panic(ErrDatabaseTransactionFailed.Raise().Extra(map[string]any{"transaction_error": errT}).Cause(err))
 		}
 	}()
 
 	err = fn(context.WithValue(ctx, KeyDatabaseTransaction, transaction))
 	if err != nil {
-		_ = transaction.Rollback(ctx) // TODO: Combine error
-		return ErrDatabaseTransactionFailed().Wrap(err)
+		errT := transaction.Rollback(ctx)
+		return ErrDatabaseTransactionFailed.Raise().Extra(map[string]any{"transaction_error": errT}).Cause(err)
 	}
 
 	err = ctx.Err()
 	if err != nil {
-		_ = transaction.Rollback(ctx) // TODO: Combine error
-		return ErrDatabaseTransactionFailed().Wrap(err)
+		errT := transaction.Rollback(ctx)
+		return ErrDatabaseTransactionFailed.Raise().Extra(map[string]any{"transaction_error": errT}).Cause(err)
 	}
 
 	err = transaction.Commit(ctx)
 	if err != nil {
-		_ = transaction.Rollback(ctx) // TODO: Combine error
-		return ErrDatabaseTransactionFailed().Wrap(err)
+		errT := transaction.Rollback(ctx)
+		return ErrDatabaseTransactionFailed.Raise().Extra(map[string]any{"transaction_error": errT}).Cause(err)
 	}
 
 	err = ctx.Err()
 	if err != nil {
-		_ = transaction.Rollback(ctx) // TODO: Combine error
-		return ErrDatabaseTransactionFailed().Wrap(err)
+		errT := transaction.Rollback(ctx)
+		return ErrDatabaseTransactionFailed.Raise().Extra(map[string]any{"transaction_error": errT}).Cause(err)
 	}
 
 	return nil
@@ -368,14 +391,15 @@ func (self *Database) Close(ctx context.Context) error {
 
 		return nil
 	})
-	switch {
-	case err == nil:
-		return nil
-	case util.ErrDeadlineExceeded.Is(err):
-		return ErrDatabaseTimedOut()
-	default:
-		return ErrDatabaseGeneric().Wrap(err)
+	if err != nil {
+		if util.ErrDeadlineExceeded.Is(err) {
+			return ErrDatabaseTimedOut.Raise().Cause(err)
+		}
+
+		return err
 	}
+
+	return nil
 }
 
 var _PlevelToKlevel = map[pgx.LogLevel]Level{
@@ -397,6 +421,6 @@ func _newPgxLogger(observer *Observer) *_pgxLogger {
 	}
 }
 
-func (self _pgxLogger) Log(ctx context.Context, level pgx.LogLevel, msg string, data map[string]any) { // nolint
+func (self _pgxLogger) Log(ctx context.Context, level pgx.LogLevel, msg string, data map[string]any) {
 	self.observer.WithLevelf(ctx, _PlevelToKlevel[level], "%s: %+v", msg, data)
 }

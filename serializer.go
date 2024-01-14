@@ -4,11 +4,16 @@ import (
 	"encoding/json"
 
 	"github.com/labstack/echo/v4"
+	"github.com/neoxelox/errors"
 
 	"github.com/neoxelox/kit/util"
 )
 
 // TODO: faster serializer (ffjson or sonic)
+
+var (
+	ErrSerializerGeneric = errors.New("serializer failed")
+)
 
 var (
 	_SERIALIZER_DEFAULT_CONFIG = SerializerConfig{}
@@ -19,10 +24,10 @@ type SerializerConfig struct {
 
 type Serializer struct {
 	config   SerializerConfig
-	observer Observer
+	observer *Observer
 }
 
-func NewSerializer(observer Observer, config SerializerConfig) *Serializer {
+func NewSerializer(observer *Observer, config SerializerConfig) *Serializer {
 	util.Merge(&config, _SERIALIZER_DEFAULT_CONFIG)
 
 	return &Serializer{
@@ -42,7 +47,7 @@ func (self *Serializer) Serialize(c echo.Context, i any, indent string) error {
 
 	err := encoder.Encode(i)
 	if err != nil {
-		return ErrSerializerGeneric().Wrap(err)
+		return ErrSerializerGeneric.Raise().Cause(err)
 	}
 
 	return nil
@@ -54,15 +59,20 @@ func (self *Serializer) Deserialize(c echo.Context, i any) error {
 	err := decoder.Decode(i)
 	if err != nil {
 		if ute, ok := err.(*json.UnmarshalTypeError); ok {
-			return ErrSerializerGeneric().Withf("Unmarshal type error: expected=%v, got=%v, field=%v, offset=%v",
-				ute.Type, ute.Value, ute.Field, ute.Offset).Wrap(err)
+			return ErrSerializerGeneric.Raise().
+				With("unmarshal type error").
+				Extra(map[string]any{"field": ute.Field, "expected": ute.Type, "actual": ute.Value, "offset": ute.Offset}).
+				Cause(ute)
 		}
 
 		if se, ok := err.(*json.SyntaxError); ok {
-			return ErrSerializerGeneric().Withf("Syntax error: offset=%v, error=%v", se.Offset, se.Error()).Wrap(err)
+			return ErrSerializerGeneric.Raise().
+				With("syntax error").
+				Extra(map[string]any{"offset": se.Offset}).
+				Cause(se)
 		}
 
-		return ErrSerializerGeneric().Wrap(err)
+		return ErrSerializerGeneric.Raise().Cause(err)
 	}
 
 	return nil

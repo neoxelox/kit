@@ -9,12 +9,18 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/neoxelox/errors"
 
 	"github.com/neoxelox/kit/util"
 )
 
 const (
 	_WORKER_REDIS_DSN = "%s:%d"
+)
+
+var (
+	ErrWorkerGeneric  = errors.New("worker failed")
+	ErrWorkerTimedOut = errors.New("worker timed out")
 )
 
 var _KlevelToAlevel = map[Level]asynq.LogLevel{
@@ -57,13 +63,13 @@ type WorkerConfig struct {
 
 type Worker struct {
 	config    WorkerConfig
-	observer  Observer
+	observer  *Observer
 	server    *asynq.Server
 	register  *asynq.ServeMux
 	scheduler *asynq.Scheduler
 }
 
-func NewWorker(observer Observer, config WorkerConfig) *Worker {
+func NewWorker(observer *Observer, config WorkerConfig) *Worker {
 	util.Merge(&config, _WORKER_DEFAULT_CONFIG)
 
 	dsn := fmt.Sprintf(_WORKER_REDIS_DSN, config.CacheHost, config.CachePort)
@@ -85,7 +91,7 @@ func NewWorker(observer Observer, config WorkerConfig) *Worker {
 		PoolSize:     *config.CacheMaxConns,
 	}
 
-	asynqLogger := _newAsynqLogger(&observer)
+	asynqLogger := _newAsynqLogger(observer)
 	asynqLogLevel := _KlevelToAlevel[asynqLogger.observer.Level()]
 
 	// Asynq debug level is too much!
@@ -93,7 +99,7 @@ func NewWorker(observer Observer, config WorkerConfig) *Worker {
 		asynqLogLevel = asynq.InfoLevel
 	}
 
-	asynqErrorHandler := _newAsynqErrorHandler(&observer)
+	asynqErrorHandler := _newAsynqErrorHandler(observer)
 
 	serverConfig := asynq.Config{
 		Concurrency:     *config.Concurrency,
@@ -132,12 +138,12 @@ func (self *Worker) Run(ctx context.Context) error {
 
 	err := self.server.Start(self.register)
 	if err != nil && err != asynq.ErrServerClosed {
-		return ErrWorkerGeneric().Wrap(err)
+		return ErrWorkerGeneric.Raise().Cause(err)
 	}
 
 	err = self.scheduler.Start()
 	if err != nil {
-		return ErrWorkerGeneric().Wrap(err)
+		return ErrWorkerGeneric.Raise().Cause(err)
 	}
 
 	return nil
@@ -175,14 +181,15 @@ func (self *Worker) Close(ctx context.Context) error {
 
 		return nil
 	})
-	switch {
-	case err == nil:
-		return nil
-	case util.ErrDeadlineExceeded.Is(err):
-		return ErrWorkerTimedOut()
-	default:
-		return ErrWorkerGeneric().Wrap(err)
+	if err != nil {
+		if util.ErrDeadlineExceeded.Is(err) {
+			return ErrWorkerTimedOut.Raise().Cause(err)
+		}
+
+		return err
 	}
+
+	return nil
 }
 
 type _asynqLogger struct {
@@ -225,14 +232,10 @@ func _newAsynqErrorHandler(observer *Observer) *_asynqErrorHandler {
 	}
 }
 
-func (self _asynqErrorHandler) handleError(ctx context.Context, task *asynq.Task, err error) {
-	self.observer.Errorf(ctx, "%s: %v", task.Type(), err)
+func (self _asynqErrorHandler) HandleProcessError(ctx context.Context, _ *asynq.Task, err error) {
+	self.observer.Error(ctx, err)
 }
 
-func (self _asynqErrorHandler) HandleProcessError(ctx context.Context, task *asynq.Task, err error) {
-	self.handleError(ctx, task, err)
-}
-
-func (self _asynqErrorHandler) HandleEnqueueError(task *asynq.Task, _ []asynq.Option, err error) {
-	self.handleError(context.Background(), task, err)
+func (self _asynqErrorHandler) HandleEnqueueError(_ *asynq.Task, _ []asynq.Option, err error) {
+	self.observer.Error(context.Background(), err)
 }

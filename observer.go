@@ -8,9 +8,9 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/cockroachdb/errors"
 	"github.com/getsentry/sentry-go"
 	"github.com/hibiken/asynq"
+	"github.com/neoxelox/errors"
 	"github.com/neoxelox/gilk"
 	"github.com/rs/xid"
 
@@ -22,6 +22,15 @@ const (
 	_OBSERVER_TASK_TRACE_ID_HEADER    = "x_trace_id"
 	_OBSERVER_SENTRY_TRACE_ID_TAG     = "trace_id"
 	_OBSERVER_SENTRY_FLUSH_TIMEOUT    = 5 * time.Second
+)
+
+var (
+	KeyTraceID Key = KeyBase + "trace:id"
+)
+
+var (
+	ErrObserverGeneric  = errors.New("observer failed")
+	ErrObserverTimedOut = errors.New("observer timed out")
 )
 
 var (
@@ -90,18 +99,18 @@ func NewObserver(ctx context.Context, config ObserverConfig, retry ...RetryConfi
 						ProfilesSampleRate: 1.0,  // Profiling events out of Transaction events
 					})
 					if err != nil {
-						return ErrObserverGeneric().WrapAs(err)
+						return ErrObserverGeneric.Raise().Cause(err)
 					}
 
 					return nil
 				})
 		})
-		switch {
-		case err == nil:
-		case util.ErrDeadlineExceeded.Is(err):
-			return nil, ErrObserverTimedOut()
-		default:
-			return nil, ErrObserverGeneric().Wrap(err)
+		if err != nil {
+			if util.ErrDeadlineExceeded.Is(err) {
+				return nil, ErrObserverTimedOut.Raise().Cause(err)
+			}
+
+			return nil, err
 		}
 
 		logger.Info("Connected to the Sentry service")
@@ -116,7 +125,7 @@ func NewObserver(ctx context.Context, config ObserverConfig, retry ...RetryConfi
 		go func() {
 			err := gilk.Serve(fmt.Sprintf(":%d", config.Gilk.Port))
 			if err != nil && err != http.ErrServerClosed {
-				logger.Error(ErrObserverGeneric().Wrap(err))
+				logger.Error(ErrObserverGeneric.Raise().Cause(err))
 			}
 		}()
 
@@ -129,7 +138,7 @@ func NewObserver(ctx context.Context, config ObserverConfig, retry ...RetryConfi
 	}, nil
 }
 
-func (self Observer) Print(ctx context.Context, i ...any) { // nolint
+func (self Observer) Print(ctx context.Context, i ...any) {
 	if !(LvlTrace >= self.config.Level) {
 		return
 	}
@@ -137,7 +146,7 @@ func (self Observer) Print(ctx context.Context, i ...any) { // nolint
 	self.Logger.Print(i...)
 }
 
-func (self Observer) Printf(ctx context.Context, format string, i ...any) { // nolint
+func (self Observer) Printf(ctx context.Context, format string, i ...any) {
 	if !(LvlTrace >= self.config.Level) {
 		return
 	}
@@ -145,7 +154,7 @@ func (self Observer) Printf(ctx context.Context, format string, i ...any) { // n
 	self.Logger.Printf(format, i...)
 }
 
-func (self Observer) Debug(ctx context.Context, i ...any) { // nolint
+func (self Observer) Debug(ctx context.Context, i ...any) {
 	if !(LvlDebug >= self.config.Level) {
 		return
 	}
@@ -153,7 +162,7 @@ func (self Observer) Debug(ctx context.Context, i ...any) { // nolint
 	self.Logger.Debug(i...)
 }
 
-func (self Observer) Debugf(ctx context.Context, format string, i ...any) { // nolint
+func (self Observer) Debugf(ctx context.Context, format string, i ...any) {
 	if !(LvlDebug >= self.config.Level) {
 		return
 	}
@@ -161,7 +170,7 @@ func (self Observer) Debugf(ctx context.Context, format string, i ...any) { // n
 	self.Logger.Debugf(format, i...)
 }
 
-func (self Observer) Info(ctx context.Context, i ...any) { // nolint
+func (self Observer) Info(ctx context.Context, i ...any) {
 	if !(LvlInfo >= self.config.Level) {
 		return
 	}
@@ -169,7 +178,7 @@ func (self Observer) Info(ctx context.Context, i ...any) { // nolint
 	self.Logger.Info(i...)
 }
 
-func (self Observer) Infof(ctx context.Context, format string, i ...any) { // nolint
+func (self Observer) Infof(ctx context.Context, format string, i ...any) {
 	if !(LvlInfo >= self.config.Level) {
 		return
 	}
@@ -177,7 +186,7 @@ func (self Observer) Infof(ctx context.Context, format string, i ...any) { // no
 	self.Logger.Infof(format, i...)
 }
 
-func (self Observer) Warn(ctx context.Context, i ...any) { // nolint
+func (self Observer) Warn(ctx context.Context, i ...any) {
 	if !(LvlWarn >= self.config.Level) {
 		return
 	}
@@ -185,7 +194,7 @@ func (self Observer) Warn(ctx context.Context, i ...any) { // nolint
 	self.Logger.Warn(i...)
 }
 
-func (self Observer) Warnf(ctx context.Context, format string, i ...any) { // nolint
+func (self Observer) Warnf(ctx context.Context, format string, i ...any) {
 	if !(LvlWarn >= self.config.Level) {
 		return
 	}
@@ -193,42 +202,50 @@ func (self Observer) Warnf(ctx context.Context, format string, i ...any) { // no
 	self.Logger.Warnf(format, i...)
 }
 
-func (self Observer) sendErrToSentry(ctx context.Context, i ...any) {
+func (self Observer) sendErrorToSentry(ctx context.Context, i ...any) {
 	if len(i) == 0 {
 		return
 	}
-
-	// TODO: Not needed with new errors package
-	var sentryEvent *sentry.Event
-	var sentryEventExtra map[string]any
-
-	switch err := i[0].(type) {
-	case nil:
-		return
-	case *Error:
-		sentryEvent, sentryEventExtra = errors.BuildSentryReport(err.Unwrap())
-	case *Exception:
-		sentryEvent, sentryEventExtra = errors.BuildSentryReport(err.Unwrap())
-	case error:
-		sentryEvent, sentryEventExtra = errors.BuildSentryReport(err)
-	default:
-		sentryEvent, sentryEventExtra = errors.BuildSentryReport(errors.NewWithDepth(2, fmt.Sprint(i...)))
-	}
-
-	for k, v := range sentryEventExtra {
-		sentryEvent.Extra[k] = v
-	}
-
-	sentryEvent.Level = sentry.LevelError
-
-	// TODO: enhance exception message and title <--- NOT NEEDED WITH NEW ERROS PACKAGE
 
 	sentryHub := sentry.GetHubFromContext(ctx)
 	if sentryHub == nil {
 		sentryHub = sentry.CurrentHub().Clone()
 	}
 
-	sentryHub.CaptureEvent(sentryEvent)
+	switch err := i[0].(type) {
+	case errors.Error:
+		sentryHub.CaptureEvent(err.SentryReport())
+	case *errors.Error:
+		sentryHub.CaptureEvent(err.SentryReport())
+	case HTTPError:
+		switch err := err.Unwrap().(type) {
+		case errors.Error:
+			sentryHub.CaptureEvent(err.SentryReport())
+		case *errors.Error:
+			sentryHub.CaptureEvent(err.SentryReport())
+		case nil:
+			// Ignore
+		default:
+			sentryHub.CaptureException(err)
+		}
+	case *HTTPError:
+		switch err := err.Unwrap().(type) {
+		case errors.Error:
+			sentryHub.CaptureEvent(err.SentryReport())
+		case *errors.Error:
+			sentryHub.CaptureEvent(err.SentryReport())
+		case nil:
+			// Ignore
+		default:
+			sentryHub.CaptureException(err)
+		}
+	case nil:
+		// Ignore
+	case error:
+		sentryHub.CaptureException(err)
+	default:
+		sentryHub.CaptureException(fmt.Errorf("%v", err))
+	}
 }
 
 func (self Observer) Error(ctx context.Context, i ...any) {
@@ -239,7 +256,7 @@ func (self Observer) Error(ctx context.Context, i ...any) {
 	self.Logger.Error(i...)
 
 	if self.config.Sentry != nil {
-		self.sendErrToSentry(ctx, i...)
+		self.sendErrorToSentry(ctx, i...)
 	}
 }
 
@@ -251,7 +268,7 @@ func (self Observer) Errorf(ctx context.Context, format string, i ...any) {
 	self.Logger.Errorf(format, i...)
 
 	if self.config.Sentry != nil {
-		self.sendErrToSentry(ctx, fmt.Sprintf(format, i...))
+		self.sendErrorToSentry(ctx, fmt.Sprintf(format, i...))
 	}
 }
 
@@ -263,7 +280,7 @@ func (self Observer) Fatal(ctx context.Context, i ...any) {
 	self.Logger.Fatal(i...)
 
 	if self.config.Sentry != nil {
-		self.sendErrToSentry(ctx, i...)
+		self.sendErrorToSentry(ctx, i...)
 	}
 }
 
@@ -275,7 +292,7 @@ func (self Observer) Fatalf(ctx context.Context, format string, i ...any) {
 	self.Logger.Fatalf(format, i...)
 
 	if self.config.Sentry != nil {
-		self.sendErrToSentry(ctx, fmt.Sprintf(format, i...))
+		self.sendErrorToSentry(ctx, fmt.Sprintf(format, i...))
 	}
 }
 
@@ -287,7 +304,7 @@ func (self Observer) Panic(ctx context.Context, i ...any) {
 	self.Logger.Panic(i...)
 
 	if self.config.Sentry != nil {
-		self.sendErrToSentry(ctx, i...)
+		self.sendErrorToSentry(ctx, i...)
 	}
 }
 
@@ -299,7 +316,7 @@ func (self Observer) Panicf(ctx context.Context, format string, i ...any) {
 	self.Logger.Panicf(format, i...)
 
 	if self.config.Sentry != nil {
-		self.sendErrToSentry(ctx, fmt.Sprintf(format, i...))
+		self.sendErrorToSentry(ctx, fmt.Sprintf(format, i...))
 	}
 }
 
@@ -527,7 +544,7 @@ func (self Observer) Flush(ctx context.Context) error {
 	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		err := self.Logger.Flush(ctx)
 		if err != nil {
-			return ErrObserverGeneric().WrapAs(err)
+			return err
 		}
 
 		if self.config.Sentry != nil {
@@ -538,7 +555,7 @@ func (self Observer) Flush(ctx context.Context) error {
 
 			ok := sentry.Flush(sentryFlushTimeout)
 			if !ok {
-				return ErrObserverGeneric().With("sentry lost events while flushing")
+				return ErrObserverGeneric.Raise().With("sentry lost events while flushing")
 			}
 		}
 
@@ -548,14 +565,15 @@ func (self Observer) Flush(ctx context.Context) error {
 
 		return nil
 	})
-	switch {
-	case err == nil:
-		return nil
-	case util.ErrDeadlineExceeded.Is(err):
-		return ErrObserverTimedOut()
-	default:
-		return ErrObserverGeneric().Wrap(err)
+	if err != nil {
+		if util.ErrDeadlineExceeded.Is(err) {
+			return ErrObserverTimedOut.Raise().Cause(err)
+		}
+
+		return err
 	}
+
+	return nil
 }
 
 func (self Observer) Close(ctx context.Context) error {
@@ -564,7 +582,7 @@ func (self Observer) Close(ctx context.Context) error {
 
 		err := self.Flush(ctx)
 		if err != nil {
-			return ErrObserverGeneric().WrapAs(err)
+			return err
 		}
 
 		if self.config.Sentry != nil {
@@ -581,19 +599,20 @@ func (self Observer) Close(ctx context.Context) error {
 
 		err = self.Logger.Close(ctx)
 		if err != nil {
-			return ErrObserverGeneric().WrapAs(err)
+			return err
 		}
 
 		self.Logger.Info("Closed observer")
 
 		return nil
 	})
-	switch {
-	case err == nil:
-		return nil
-	case util.ErrDeadlineExceeded.Is(err):
-		return ErrObserverTimedOut()
-	default:
-		return ErrObserverGeneric().Wrap(err)
+	if err != nil {
+		if util.ErrDeadlineExceeded.Is(err) {
+			return ErrObserverTimedOut.Raise().Cause(err)
+		}
+
+		return err
 	}
+
+	return nil
 }

@@ -10,8 +10,13 @@ import (
 	"regexp"
 
 	"github.com/labstack/echo/v4"
+	"github.com/neoxelox/errors"
 
 	"github.com/neoxelox/kit/util"
+)
+
+var (
+	ErrRendererGeneric = errors.New("renderer failed")
 )
 
 var (
@@ -28,11 +33,11 @@ type RendererConfig struct {
 
 type Renderer struct {
 	config   RendererConfig
-	observer Observer
+	observer *Observer
 	renderer *template.Template
 }
 
-func NewRenderer(observer Observer, config RendererConfig) (*Renderer, error) {
+func NewRenderer(observer *Observer, config RendererConfig) (*Renderer, error) {
 	util.Merge(&config, _RENDERER_DEFAULT_CONFIG)
 
 	*config.TemplatesPath = filepath.Clean(*config.TemplatesPath)
@@ -43,7 +48,7 @@ func NewRenderer(observer Observer, config RendererConfig) (*Renderer, error) {
 
 	err := filepath.WalkDir(*config.TemplatesPath, func(path string, info fs.DirEntry, err error) error {
 		if err != nil {
-			return ErrRendererGeneric().WrapAs(err)
+			return ErrRendererGeneric.Raise().Cause(err)
 		}
 
 		if info.IsDir() {
@@ -58,18 +63,18 @@ func NewRenderer(observer Observer, config RendererConfig) (*Renderer, error) {
 
 		file, err := ioutil.ReadFile(path)
 		if err != nil {
-			return ErrRendererGeneric().WrapAs(err)
+			return ErrRendererGeneric.Raise().Cause(err)
 		}
 
 		_, err = renderer.New(name).Parse(string(file))
 		if err != nil {
-			return ErrRendererGeneric().WrapAs(err)
+			return ErrRendererGeneric.Raise().Cause(err)
 		}
 
 		return nil
 	})
 	if err != nil {
-		return nil, ErrRendererGeneric().Wrap(err)
+		return nil, err
 	}
 
 	return &Renderer{
@@ -79,39 +84,39 @@ func NewRenderer(observer Observer, config RendererConfig) (*Renderer, error) {
 	}, nil
 }
 
-func (self *Renderer) Render(w io.Writer, name string, data any, c echo.Context) error { // nolint
+func (self *Renderer) Render(w io.Writer, name string, data any, c echo.Context) error {
 	err := self.renderer.ExecuteTemplate(w, name, data)
 	if err != nil {
-		return ErrRendererGeneric().Wrap(err)
+		return ErrRendererGeneric.Raise().Extra(map[string]any{"template": name}).Cause(err)
 	}
 
 	return nil
 }
 
-func (self *Renderer) RenderWriter(w io.Writer, template string, data any) error { // nolint
+func (self *Renderer) RenderWriter(w io.Writer, template string, data any) error {
 	err := self.renderer.ExecuteTemplate(w, template, data)
 	if err != nil {
-		return ErrRendererGeneric().Wrap(err)
+		return ErrRendererGeneric.Raise().Extra(map[string]any{"template": template}).Cause(err)
 	}
 
 	return nil
 }
 
-func (self *Renderer) RenderBytes(template string, data any) ([]byte, error) { // nolint
+func (self *Renderer) RenderBytes(template string, data any) ([]byte, error) {
 	var w bytes.Buffer
 
 	err := self.RenderWriter(&w, template, data)
 	if err != nil {
-		return nil, ErrRendererGeneric().Wrap(err)
+		return nil, err
 	}
 
 	return w.Bytes(), nil
 }
 
-func (self *Renderer) RenderString(template string, data any) (string, error) { // nolint
-	bytes, err := self.RenderBytes(template, data) // nolint
+func (self *Renderer) RenderString(template string, data any) (string, error) {
+	bytes, err := self.RenderBytes(template, data)
 	if err != nil {
-		return "", ErrRendererGeneric().Wrap(err)
+		return "", err
 	}
 
 	return string(bytes), nil

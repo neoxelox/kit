@@ -9,8 +9,24 @@ import (
 
 	"github.com/labstack/echo/v4"
 	echoMiddleware "github.com/labstack/echo/v4/middleware"
+	"github.com/neoxelox/errors"
 
 	"github.com/neoxelox/kit/util"
+)
+
+var (
+	ErrServerGeneric  = errors.New("server failed")
+	ErrServerTimedOut = errors.New("server timed out")
+)
+
+var (
+	HTTPErrServerGeneric     = NewHTTPError("ERR_SERVER_GENERIC", http.StatusInternalServerError)
+	HTTPErrServerUnavailable = NewHTTPError("ERR_SERVER_UNAVAILABLE", http.StatusServiceUnavailable)
+	HTTPErrRequestTimeout    = NewHTTPError("ERR_REQUEST_TIMEOUT", http.StatusGatewayTimeout)
+	HTTPErrClientGeneric     = NewHTTPError("ERR_CLIENT_GENERIC", http.StatusBadRequest)
+	HTTPErrInvalidRequest    = NewHTTPError("ERR_INVALID_REQUEST", http.StatusBadRequest)
+	HTTPErrNotFound          = NewHTTPError("ERR_NOT_FOUND", http.StatusNotFound)
+	HTTPErrUnauthorized      = NewHTTPError("ERR_UNAUTHORIZED", http.StatusUnauthorized)
 )
 
 var (
@@ -43,12 +59,12 @@ type ServerConfig struct {
 
 type Server struct {
 	config   ServerConfig
-	observer Observer
+	observer *Observer
 	server   *echo.Echo
 }
 
-func NewServer(observer Observer, serializer Serializer, binder Binder,
-	renderer Renderer, exceptionHandler ExceptionHandler, config ServerConfig) *Server {
+func NewServer(observer *Observer, serializer *Serializer, binder *Binder,
+	renderer *Renderer, httpErrorHandler *HTTPErrorHandler, config ServerConfig) *Server {
 	util.Merge(&config, _SERVER_DEFAULT_CONFIG)
 
 	server := echo.New()
@@ -63,13 +79,13 @@ func NewServer(observer Observer, serializer Serializer, binder Binder,
 	server.Server.ReadTimeout = *config.RequestReadTimeout
 	server.Server.WriteTimeout = *config.ResponseWriteTimeout
 
-	// server.Logger = nil    // Observer should always be used instead
-	// server.StdLogger = nil // Observer should always be used instead
-	server.JSONSerializer = &serializer
-	server.Binder = &binder
-	server.Renderer = &renderer
-	// server.Validator = nil // Validator should always be at domain level
-	server.HTTPErrorHandler = exceptionHandler.Handle
+	// server.Logger = nil    // Can't fix nil but observer should always be used instead
+	// server.StdLogger = nil // Can't fix nil but observer should always be used instead
+	server.JSONSerializer = serializer
+	server.Binder = binder
+	server.Renderer = renderer
+	// server.Validator = nil // Can't fix nil but validator should always be at domain level
+	server.HTTPErrorHandler = httpErrorHandler.Handle
 	server.IPExtractor = *config.RequestIPExtractor
 
 	requestFilePattern := regexp.MustCompile(*config.RequestFilePattern)
@@ -103,7 +119,7 @@ func (self *Server) Run(ctx context.Context) error {
 
 	err := self.server.Start(fmt.Sprintf(":%d", self.config.Port))
 	if err != nil && err != http.ErrServerClosed {
-		return ErrServerGeneric().Wrap(err)
+		return ErrServerGeneric.Raise().Cause(err)
 	}
 
 	return nil
@@ -129,19 +145,20 @@ func (self *Server) Close(ctx context.Context) error {
 
 		err := self.server.Shutdown(ctx)
 		if err != nil {
-			return ErrServerGeneric().WrapAs(err)
+			return ErrServerGeneric.Raise().Cause(err)
 		}
 
 		self.observer.Info(ctx, "Closed server")
 
 		return nil
 	})
-	switch {
-	case err == nil:
-		return nil
-	case util.ErrDeadlineExceeded.Is(err):
-		return ErrServerTimedOut()
-	default:
-		return ErrServerGeneric().Wrap(err)
+	if err != nil {
+		if util.ErrDeadlineExceeded.Is(err) {
+			return ErrServerTimedOut.Raise().Cause(err)
+		}
+
+		return err
 	}
+
+	return nil
 }

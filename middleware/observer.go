@@ -27,10 +27,10 @@ type ObserverConfig struct {
 
 type Observer struct {
 	config   ObserverConfig
-	observer kit.Observer
+	observer *kit.Observer
 }
 
-func NewObserver(observer kit.Observer, config ObserverConfig) *Observer {
+func NewObserver(observer *kit.Observer, config ObserverConfig) *Observer {
 	util.Merge(&config, _OBSERVER_MIDDLEWARE_DEFAULT_CONFIG)
 
 	return &Observer{

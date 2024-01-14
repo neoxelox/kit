@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/neoxelox/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/diode"
 
@@ -26,6 +27,11 @@ const (
 	_LOGGER_FLUSH_DELAY            = _LOGGER_POLL_INTERVAL * 10
 )
 
+var (
+	ErrLoggerGeneric  = errors.New("logger failed")
+	ErrLoggerTimedOut = errors.New("logger timed out")
+)
+
 var _KlevelToZlevel = map[Level]zerolog.Level{
 	LvlTrace: zerolog.TraceLevel,
 	LvlDebug: zerolog.DebugLevel,
@@ -41,6 +47,17 @@ var (
 	}
 )
 
+type Level int
+
+var (
+	LvlTrace Level = -5
+	LvlDebug Level = -4
+	LvlInfo  Level = -3
+	LvlWarn  Level = -2
+	LvlError Level = -1
+	LvlNone  Level
+)
+
 type LoggerConfig struct {
 	Level          Level
 	Service        string
@@ -48,8 +65,8 @@ type LoggerConfig struct {
 }
 
 type Logger struct {
-	logger         *zerolog.Logger
 	config         LoggerConfig
+	logger         *zerolog.Logger
 	out            io.Writer
 	prefix         string
 	header         string
@@ -102,20 +119,22 @@ func (self Logger) Logger() *zerolog.Logger {
 
 func (self Logger) Flush(ctx context.Context) error {
 	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
+		// Wait for last minute logs
 		time.Sleep(_LOGGER_FLUSH_DELAY)
 		os.Stdout.Sync()
 		os.Stderr.Sync()
 
 		return nil
 	})
-	switch {
-	case err == nil:
-		return nil
-	case util.ErrDeadlineExceeded.Is(err):
-		return ErrLoggerTimedOut()
-	default:
-		return ErrLoggerGeneric().Wrap(err)
+	if err != nil {
+		if util.ErrDeadlineExceeded.Is(err) {
+			return ErrLoggerTimedOut.Raise().Cause(err)
+		}
+
+		return err
 	}
+
+	return nil
 }
 
 func (self Logger) Close(ctx context.Context) error {
@@ -124,31 +143,32 @@ func (self Logger) Close(ctx context.Context) error {
 
 		err := self.Flush(ctx)
 		if err != nil {
-			return ErrLoggerGeneric().WrapAs(err)
+			return err
 		}
 
 		writer, ok := self.out.(*diode.Writer)
 		if !ok {
-			panic("logger writer is not diode")
+			return ErrLoggerGeneric.Raise().With("logger writer %T is not diode", writer)
 		}
 
 		err = writer.Close()
 		if err != nil {
-			return ErrLoggerGeneric().WrapAs(err)
+			return ErrLoggerGeneric.Raise().Cause(err)
 		}
 
 		self.Info("Closed logger")
 
 		return nil
 	})
-	switch {
-	case err == nil:
-		return nil
-	case util.ErrDeadlineExceeded.Is(err):
-		return ErrLoggerTimedOut()
-	default:
-		return ErrLoggerGeneric().Wrap(err)
+	if err != nil {
+		if util.ErrDeadlineExceeded.Is(err) {
+			return ErrLoggerTimedOut.Raise().Cause(err)
+		}
+
+		return err
 	}
+
+	return nil
 }
 
 func (self Logger) Output() io.Writer {
@@ -168,7 +188,7 @@ func (self *Logger) SetPrefix(p string) {
 	self.prefix = p
 }
 
-func (self Logger) Level() Level { // nolint
+func (self Logger) Level() Level {
 	return self.level
 }
 
@@ -228,11 +248,17 @@ func (self Logger) Warnf(format string, i ...any) {
 func (self Logger) printDebugError(i ...any) {
 	if len(i) >= 1 {
 		switch err := i[0].(type) {
-		case *Error:
-			fmt.Printf("\x1b[91m%+v\x1b[0m\n", err.Unwrap()) // nolint
+		case errors.Error:
+			fmt.Printf("%+v", err)
 			i = i[1:]
-		case *Exception:
-			fmt.Printf("\x1b[91m%+v\x1b[0m\n", err.Unwrap()) // nolint
+		case *errors.Error:
+			fmt.Printf("%+v", err)
+			i = i[1:]
+		case HTTPError:
+			fmt.Printf("%+v", err)
+			i = i[1:]
+		case *HTTPError:
+			fmt.Printf("%+v", err)
 			i = i[1:]
 		}
 	}
@@ -241,7 +267,7 @@ func (self Logger) printDebugError(i ...any) {
 		return
 	}
 
-	fmt.Printf("\x1b[91m%s\x1b[0m\n", fmt.Sprint(i...)) // nolint
+	fmt.Printf("\x1b[1;91m%s\x1b[0m\n", fmt.Sprint(i...))
 }
 
 func (self Logger) Error(i ...any) {
@@ -263,8 +289,9 @@ func (self Logger) Errorf(format string, i ...any) {
 func (self Logger) Fatal(i ...any) {
 	if LvlDebug >= self.level {
 		self.printDebugError(i...)
-		os.Exit(1) // nolint
-	} else { // nolint
+		// Allow fast exitting only on debug level
+		os.Exit(1)
+	} else {
 		self.logger.Fatal().Caller(self.skipFrameCount).Msg(fmt.Sprint(i...))
 	}
 }
@@ -272,8 +299,9 @@ func (self Logger) Fatal(i ...any) {
 func (self Logger) Fatalf(format string, i ...any) {
 	if LvlDebug >= self.level {
 		self.printDebugError(fmt.Sprintf(format, i...))
-		os.Exit(1) // nolint
-	} else { // nolint
+		// Allow fast exitting only on debug level
+		os.Exit(1)
+	} else {
 		self.logger.Fatal().Caller(self.skipFrameCount).Msgf(format, i...)
 	}
 }
@@ -281,6 +309,7 @@ func (self Logger) Fatalf(format string, i ...any) {
 func (self Logger) Panic(i ...any) {
 	if LvlDebug >= self.level {
 		self.printDebugError(i...)
+		// Allow panicking only on debug level
 		panic(fmt.Sprint(i...))
 	} else {
 		self.logger.Panic().Caller(self.skipFrameCount).Msg(fmt.Sprint(i...))
@@ -290,6 +319,7 @@ func (self Logger) Panic(i ...any) {
 func (self Logger) Panicf(format string, i ...any) {
 	if LvlDebug >= self.level {
 		self.printDebugError(fmt.Sprintf(format, i...))
+		// Allow panicking only on debug level
 		panic(fmt.Sprintf(format, i...))
 	} else {
 		self.logger.Panic().Caller(self.skipFrameCount).Msgf(format, i...)
