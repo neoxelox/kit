@@ -10,6 +10,7 @@ import (
 )
 
 // TODO: check whether to merge the recover middleware with the observer one as it is not protected
+// because the observer middleware has to be the first one in order to log the responses of the panicks
 
 var (
 	_RECOVER_MIDDLEWARE_DEFAULT_CONFIG = RecoverConfig{}

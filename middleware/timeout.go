@@ -1,8 +1,9 @@
 package middleware
 
 // Heavily inspired by https://github.com/rookie-ninja/rk-echo/blob/master/middleware/timeout/middleware.go
+
 // TODO: Below 1ms difference between timeout and view handler finalization there is a response write datarace
-// also it is too complex and some parts are not good for performance, it needs a refactor.
+// also it is too complex and some parts are not good for performance, it needs a refactor
 
 import (
 	"bytes"
