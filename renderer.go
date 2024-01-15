@@ -86,7 +86,7 @@ func NewRenderer(observer *Observer, config RendererConfig) (*Renderer, error) {
 	}, nil
 }
 
-func (self *Renderer) Render(w io.Writer, name string, data any, c echo.Context) error {
+func (self *Renderer) Render(w io.Writer, name string, data any, _ echo.Context) error {
 	err := self.renderer.ExecuteTemplate(w, name, data)
 	if err != nil {
 		return ErrRendererGeneric.Raise().Extra(map[string]any{"template": name}).Cause(err)

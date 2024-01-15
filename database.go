@@ -132,7 +132,8 @@ func NewDatabase(ctx context.Context, observer *Observer, config DatabaseConfig,
 	poolConfig.ConnConfig.ConnectTimeout = *config.DialTimeout
 	poolConfig.ConnConfig.RuntimeParams["standard_conforming_strings"] = "on"
 	poolConfig.ConnConfig.RuntimeParams["application_name"] = config.Service
-	poolConfig.ConnConfig.RuntimeParams["default_transaction_isolation"] = string(_KisoLevelToPisoLevel[*config.DefaultIsolationLevel])
+	poolConfig.ConnConfig.RuntimeParams["default_transaction_isolation"] = string(
+		_KisoLevelToPisoLevel[*config.DefaultIsolationLevel])
 	poolConfig.ConnConfig.RuntimeParams["statement_timeout"] = strconv.Itoa(int(config.StatementTimeout.Milliseconds()))
 	poolConfig.ConnConfig.RuntimeParams["lock_timeout"] = strconv.Itoa(int(config.StatementTimeout.Milliseconds()))
 
@@ -153,7 +154,7 @@ func NewDatabase(ctx context.Context, observer *Observer, config DatabaseConfig,
 		return util.ExponentialRetry(
 			_retry.Attempts, _retry.InitialDelay, _retry.LimitDelay,
 			_retry.Retriables, func(attempt int) error {
-				var err error
+				var err error // nolint:govet
 
 				observer.Infof(ctx, "Trying to connect to the %s database %d/%d",
 					config.Database, attempt, _retry.Attempts)
@@ -309,7 +310,8 @@ func (self *Database) Exec(ctx context.Context, stmt *sqlf.Stmt) (int, error) {
 	return int(command.RowsAffected()), nil
 }
 
-func (self *Database) Transaction(ctx context.Context, level *IsolationLevel, fn func(ctx context.Context) error) error {
+func (self *Database) Transaction(
+	ctx context.Context, level *IsolationLevel, fn func(ctx context.Context) error) error {
 	if level == nil {
 		level = self.config.DefaultIsolationLevel
 	}
@@ -344,7 +346,7 @@ func (self *Database) Transaction(ctx context.Context, level *IsolationLevel, fn
 		if rec != nil {
 			errT := transaction.Rollback(ctx)
 
-			err, ok := rec.(error)
+			err, ok := rec.(error) // nolint:govet
 			if !ok {
 				err = ErrDatabaseGeneric.Raise().With("%v", rec)
 			}

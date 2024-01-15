@@ -66,7 +66,8 @@ func NewLocalizer(observer *Observer, config LocalizerConfig) (*Localizer, error
 	}, nil
 }
 
-func _getCopies(observer *Observer, path string, extensions *regexp.Regexp) (map[language.Tag]map[string]string, error) {
+func _getCopies(
+	observer *Observer, path string, extensions *regexp.Regexp) (map[language.Tag]map[string]string, error) {
 	copiesByLang := make(map[language.Tag]map[string]string)
 
 	err := filepath.WalkDir(path, func(path string, info fs.DirEntry, err error) error {

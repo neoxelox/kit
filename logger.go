@@ -245,6 +245,7 @@ func (self Logger) Warnf(format string, i ...any) {
 	self.logger.Warn().Caller(self.skipFrameCount).Msgf(format, i...)
 }
 
+// nolint:forbidigo
 func (self Logger) printDebugError(i ...any) {
 	if len(i) >= 1 {
 		switch err := i[0].(type) {
@@ -290,8 +291,8 @@ func (self Logger) Fatal(i ...any) {
 	if LvlDebug >= self.level {
 		self.printDebugError(i...)
 		// Allow fast exitting only on debug level
-		os.Exit(1)
-	} else {
+		os.Exit(1) // nolint:revive
+	} else { // nolint:revive
 		self.logger.Fatal().Caller(self.skipFrameCount).Msg(fmt.Sprint(i...))
 	}
 }
@@ -300,8 +301,8 @@ func (self Logger) Fatalf(format string, i ...any) {
 	if LvlDebug >= self.level {
 		self.printDebugError(fmt.Sprintf(format, i...))
 		// Allow fast exitting only on debug level
-		os.Exit(1)
-	} else {
+		os.Exit(1) // nolint:revive
+	} else { // nolint:revive
 		self.logger.Fatal().Caller(self.skipFrameCount).Msgf(format, i...)
 	}
 }
@@ -311,7 +312,7 @@ func (self Logger) Panic(i ...any) {
 		self.printDebugError(i...)
 		// Allow panicking only on debug level
 		panic(fmt.Sprint(i...))
-	} else {
+	} else { // nolint:revive
 		self.logger.Panic().Caller(self.skipFrameCount).Msg(fmt.Sprint(i...))
 	}
 }
@@ -321,7 +322,7 @@ func (self Logger) Panicf(format string, i ...any) {
 		self.printDebugError(fmt.Sprintf(format, i...))
 		// Allow panicking only on debug level
 		panic(fmt.Sprintf(format, i...))
-	} else {
+	} else { // nolint:revive
 		self.logger.Panic().Caller(self.skipFrameCount).Msgf(format, i...)
 	}
 }

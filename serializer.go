@@ -61,7 +61,8 @@ func (self *Serializer) Deserialize(c echo.Context, i any) error {
 		if ute, ok := err.(*json.UnmarshalTypeError); ok {
 			return ErrSerializerGeneric.Raise().
 				With("unmarshal type error").
-				Extra(map[string]any{"field": ute.Field, "expected": ute.Type, "actual": ute.Value, "offset": ute.Offset}).
+				Extra(map[string]any{
+					"field": ute.Field, "expected": ute.Type, "actual": ute.Value, "offset": ute.Offset}).
 				Cause(ute)
 		}
 

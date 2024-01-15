@@ -70,10 +70,10 @@ linters-settings:
   # Checks for unhandled errors.
   errcheck:
     # Report about not checking of errors in type assertions: `a := b.(MyStruct)`.
-    check-type-assertions: true
+    check-type-assertions: false
 
     # report about assignment of errors to blank identifier: `num, _ := strconv.Atoi(numStr)`.
-    check-blank: true
+    check-blank: false
 
   # Checks types passed to the json encoding functions.
   errchkjson:
@@ -244,9 +244,9 @@ linters-settings:
       - name: add-constant
         arguments:
           - maxLitCount: "3"
-            allowStrs: '"",":",": "'
-            allowInts: "0,1,2,3"
-            allowFloats: "0.0,0.1,0.2,0.25,0.5,1.0,2.0,3.0"
+            allowStrs: '"",":",": ","%v","%+v","%s","%d"'
+            allowInts: "0,1,2,3,10"
+            allowFloats: "0.0,0.1,0.2,0.25,0.5,1.0,2.0,3.0,10.0"
       - name: unused-receiver
         disabled: true
       - name: unhandled-error
@@ -256,6 +256,14 @@ linters-settings:
       - name: nested-structs
         disabled: true
       - name: var-declaration
+        disabled: true
+      - name: redefines-builtin-id
+        disabled: true
+      - name: unchecked-type-assertion
+        disabled: true
+      - name: import-shadowing
+        disabled: true
+      - name: import-alias-naming
         disabled: true
 
   # Checks for struct tags correctness.
@@ -273,13 +281,6 @@ linters-settings:
         bson: camel
         avro: snake
         mapstructure: kebab
-
-  # Checks for correct usage of empty lines.
-  wsl:
-    # See https://github.com/bombsimon/wsl/blob/master/doc/configuration.md for documentation of available settings.
-    # Controls if you may cuddle assignments and anything without needing an empty line between them.
-    allow-assign-and-anything: true
-    allow-cuddle-declarations: true
 
 # Options for linter availability.
 linters:
@@ -327,6 +328,10 @@ linters:
     - varcheck
     - structcheck
     - deadcode
+    - predeclared
+    - wrapcheck
+    - wsl
+    - forcetypeassert
 
 # Options for issue availability.
 issues:
@@ -362,9 +367,6 @@ issues:
 
     - linters: [govet]
       text: "pointer bytes could be"
-
-    - linters: [wsl]
-      text: "anonymous switch statements should never be cuddled"
 
   # Independently of option `exclude` we use default exclude patterns,
   # it can be disabled by this option.

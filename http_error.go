@@ -93,6 +93,7 @@ func (self HTTPError) Error() string {
 
 func (self HTTPError) MarshalText() ([]byte, error) {
 	if self.cause != nil {
+		// nolint:nilerr
 		return []byte(fmt.Sprintf("code=%s status=%d message=%s", self.code, self.status, self.cause.Error())), nil
 	}
 

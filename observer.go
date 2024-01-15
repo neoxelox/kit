@@ -139,7 +139,7 @@ func NewObserver(ctx context.Context, config ObserverConfig, retry ...RetryConfi
 	}, nil
 }
 
-func (self Observer) Print(ctx context.Context, i ...any) {
+func (self Observer) Print(_ context.Context, i ...any) {
 	if !(LvlTrace >= self.config.Level) {
 		return
 	}
@@ -147,7 +147,7 @@ func (self Observer) Print(ctx context.Context, i ...any) {
 	self.Logger.Print(i...)
 }
 
-func (self Observer) Printf(ctx context.Context, format string, i ...any) {
+func (self Observer) Printf(_ context.Context, format string, i ...any) {
 	if !(LvlTrace >= self.config.Level) {
 		return
 	}
@@ -155,7 +155,7 @@ func (self Observer) Printf(ctx context.Context, format string, i ...any) {
 	self.Logger.Printf(format, i...)
 }
 
-func (self Observer) Debug(ctx context.Context, i ...any) {
+func (self Observer) Debug(_ context.Context, i ...any) {
 	if !(LvlDebug >= self.config.Level) {
 		return
 	}
@@ -163,7 +163,7 @@ func (self Observer) Debug(ctx context.Context, i ...any) {
 	self.Logger.Debug(i...)
 }
 
-func (self Observer) Debugf(ctx context.Context, format string, i ...any) {
+func (self Observer) Debugf(_ context.Context, format string, i ...any) {
 	if !(LvlDebug >= self.config.Level) {
 		return
 	}
@@ -171,7 +171,7 @@ func (self Observer) Debugf(ctx context.Context, format string, i ...any) {
 	self.Logger.Debugf(format, i...)
 }
 
-func (self Observer) Info(ctx context.Context, i ...any) {
+func (self Observer) Info(_ context.Context, i ...any) {
 	if !(LvlInfo >= self.config.Level) {
 		return
 	}
@@ -179,7 +179,7 @@ func (self Observer) Info(ctx context.Context, i ...any) {
 	self.Logger.Info(i...)
 }
 
-func (self Observer) Infof(ctx context.Context, format string, i ...any) {
+func (self Observer) Infof(_ context.Context, format string, i ...any) {
 	if !(LvlInfo >= self.config.Level) {
 		return
 	}
@@ -187,7 +187,7 @@ func (self Observer) Infof(ctx context.Context, format string, i ...any) {
 	self.Logger.Infof(format, i...)
 }
 
-func (self Observer) Warn(ctx context.Context, i ...any) {
+func (self Observer) Warn(_ context.Context, i ...any) {
 	if !(LvlWarn >= self.config.Level) {
 		return
 	}
@@ -195,7 +195,7 @@ func (self Observer) Warn(ctx context.Context, i ...any) {
 	self.Logger.Warn(i...)
 }
 
-func (self Observer) Warnf(ctx context.Context, format string, i ...any) {
+func (self Observer) Warnf(_ context.Context, format string, i ...any) {
 	if !(LvlWarn >= self.config.Level) {
 		return
 	}

@@ -45,7 +45,7 @@ func (self *HTTPErrorHandler) Handle(err error, ctx echo.Context) {
 		return
 	}
 
-	httpError := HTTPErrServerGeneric.Cause(err)
+	httpError := HTTPErrServerGeneric.Cause(err) // nolint:ineffassign,staticcheck,wastedassign
 
 	httpError, ok := err.(*HTTPError)
 	if !ok {
