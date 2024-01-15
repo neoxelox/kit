@@ -10,6 +10,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/hibiken/asynq"
+	"github.com/mkideal/cli"
 	"github.com/neoxelox/errors"
 	"github.com/neoxelox/gilk"
 	"github.com/rs/xid"
@@ -528,6 +529,39 @@ func (self Observer) TraceTask(ctx context.Context, task *asynq.Task) (context.C
 				sentry.WithTransactionSource(sentry.SourceTask), sentry.ContinueFromTrace(sentryTrace))
 		} else {
 			sentrySpan = sentry.StartSpan(ctx, spanName, sentry.ContinueFromTrace(sentryTrace))
+		}
+
+		ctx = sentrySpan.Context()
+	}
+
+	return ctx, func() {
+		if self.config.Sentry != nil {
+			sentrySpan.Finish()
+		}
+	}
+}
+
+func (self Observer) TraceCommand(ctx context.Context, command *cli.Context) (context.Context, func()) {
+	traceID := self.GetTrace(ctx)
+	ctx = self.SetTrace(ctx, traceID)
+
+	spanName := fmt.Sprintf("$ %s", command.Path())
+
+	var sentrySpan *sentry.Span
+	if self.config.Sentry != nil {
+		sentryHub := sentry.GetHubFromContext(ctx)
+		if sentryHub == nil {
+			sentryHub = sentry.CurrentHub().Clone()
+			ctx = sentry.SetHubOnContext(ctx, sentryHub)
+		}
+
+		sentryHub.Scope().SetTag(_OBSERVER_SENTRY_TRACE_ID_TAG, traceID)
+
+		if sentry.TransactionFromContext(ctx) == nil {
+			sentrySpan = sentry.StartTransaction(
+				ctx, spanName, sentry.WithOpName(spanName), sentry.WithTransactionSource(sentry.SourceComponent))
+		} else {
+			sentrySpan = sentry.StartSpan(ctx, spanName)
 		}
 
 		ctx = sentrySpan.Context()

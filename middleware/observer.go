@@ -9,6 +9,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/hibiken/asynq"
 	"github.com/labstack/echo/v4"
+	"github.com/mkideal/cli"
 
 	"github.com/neoxelox/kit"
 	"github.com/neoxelox/kit/util"
@@ -112,7 +113,7 @@ func (self *Observer) HandleTask(next asynq.Handler) asynq.Handler {
 
 		self.observer.Logger.Logger().Info().
 			Str("queue", queue).
-			Str("type", task.Type()).
+			Str("task", task.Type()).
 			Str("status", status).
 			Dur("latency", stop.Sub(start)).
 			Str("trace_id", traceID).
@@ -120,4 +121,33 @@ func (self *Observer) HandleTask(next asynq.Handler) asynq.Handler {
 
 		return err
 	})
+}
+
+func (self *Observer) HandleCommand(next kit.RunnerHandler) kit.RunnerHandler {
+	return func(ctx context.Context, command *cli.Context) error {
+		start := time.Now()
+
+		ctx, endTraceCommand := self.observer.TraceCommand(ctx, command)
+		defer endTraceCommand()
+
+		traceID := self.observer.GetTrace(ctx)
+
+		err := next(ctx, command)
+
+		status := "succeeded"
+		if err != nil {
+			status = "failed"
+		}
+
+		stop := time.Now()
+
+		self.observer.Logger.Logger().Info().
+			Str("command", command.Path()).
+			Str("status", status).
+			Dur("latency", stop.Sub(start)).
+			Str("trace_id", traceID).
+			Msg("")
+
+		return err
+	}
 }
