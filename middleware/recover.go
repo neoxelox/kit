@@ -40,7 +40,7 @@ func (self *Recover) Handle(next echo.HandlerFunc) echo.HandlerFunc {
 			if rec != nil {
 				err, ok := rec.(error)
 				if !ok {
-					err = kit.ErrServerGeneric.Raise().With("%v", rec)
+					err = kit.ErrHTTPServerGeneric.Raise().With("%v", rec)
 				}
 
 				if err == http.ErrAbortHandler {
