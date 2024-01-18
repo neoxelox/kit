@@ -1,8 +1,10 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 
+	"github.com/hibiken/asynq"
 	"github.com/labstack/echo/v4"
 
 	"github.com/neoxelox/kit"
@@ -33,7 +35,7 @@ func NewRecover(observer *kit.Observer, config RecoverConfig) *Recover {
 	}
 }
 
-func (self *Recover) Handle(next echo.HandlerFunc) echo.HandlerFunc {
+func (self *Recover) HandleRequest(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
 		defer func() {
 			rec := recover()
@@ -54,4 +56,25 @@ func (self *Recover) Handle(next echo.HandlerFunc) echo.HandlerFunc {
 
 		return next(ctx)
 	}
+}
+
+func (self *Recover) HandleTask(next asynq.Handler) asynq.Handler {
+	return asynq.HandlerFunc(func(ctx context.Context, task *asynq.Task) error {
+		defer func() {
+			rec := recover()
+			if rec != nil {
+				err, ok := rec.(error)
+				if !ok {
+					err = kit.ErrWorkerGeneric.Raise().With("%v", rec)
+				}
+
+				// Log error ourselves ...?
+				// TODO: Test if the worker survives with a panic
+				// and check whether the error is passed to the observer???
+				self.observer.Error(ctx, err)
+			}
+		}()
+
+		return next.ProcessTask(ctx, task)
+	})
 }
