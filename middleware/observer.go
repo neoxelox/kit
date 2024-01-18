@@ -44,7 +44,7 @@ func (self *Observer) HandleRequest(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
 		start := time.Now()
 
-		traceCtx, endTraceRequest := self.observer.TraceRequest(ctx.Request().Context(), ctx.Request())
+		traceCtx, endTraceRequest := self.observer.TraceServerRequest(ctx.Request().Context(), ctx.Request())
 		defer endTraceRequest()
 
 		ctx.SetRequest(ctx.Request().WithContext(traceCtx))

@@ -397,7 +397,7 @@ func (self Observer) TraceSpan(ctx context.Context, name ...string) (context.Con
 	}
 }
 
-func (self Observer) TraceRequest(ctx context.Context, request *http.Request) (context.Context, func()) {
+func (self Observer) TraceServerRequest(ctx context.Context, request *http.Request) (context.Context, func()) {
 	traceID := self.GetTrace(ctx)
 	if request.Header.Get(_OBSERVER_REQUEST_TRACE_ID_HEADER) != "" {
 		traceID = request.Header.Get(_OBSERVER_REQUEST_TRACE_ID_HEADER)
@@ -445,6 +445,44 @@ func (self Observer) TraceRequest(ctx context.Context, request *http.Request) (c
 			endGilkRequest()
 		}
 
+		if self.config.Sentry != nil {
+			sentrySpan.Finish()
+		}
+	}
+}
+
+func (self Observer) TraceClientRequest(ctx context.Context, request *http.Request) (context.Context, func()) {
+	traceID := self.GetTrace(ctx)
+	ctx = self.SetTrace(ctx, traceID)
+
+	request.Header.Set(_OBSERVER_REQUEST_TRACE_ID_HEADER, traceID)
+
+	spanName := fmt.Sprintf("%s %s", request.Method, request.URL)
+
+	var sentrySpan *sentry.Span
+	if self.config.Sentry != nil {
+		sentryHub := sentry.GetHubFromContext(ctx)
+		if sentryHub == nil {
+			sentryHub = sentry.CurrentHub().Clone()
+			ctx = sentry.SetHubOnContext(ctx, sentryHub)
+		}
+
+		// TODO: sentryHub.Scope().SetRequest(request) needed? Check impact on Sentry
+		sentryHub.Scope().SetTag(_OBSERVER_SENTRY_TRACE_ID_TAG, traceID)
+
+		if sentry.TransactionFromContext(ctx) == nil {
+			sentrySpan = sentry.StartTransaction(ctx, spanName, sentry.WithOpName(spanName),
+				sentry.WithTransactionSource(sentry.SourceURL))
+		} else {
+			sentrySpan = sentry.StartSpan(ctx, spanName)
+		}
+
+		request.Header.Set(sentry.SentryTraceHeader, sentrySpan.ToSentryTrace())
+
+		ctx = sentrySpan.Context()
+	}
+
+	return ctx, func() {
 		if self.config.Sentry != nil {
 			sentrySpan.Finish()
 		}
