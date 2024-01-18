@@ -1,44 +1,47 @@
 package kit
 
 import (
+	"context"
 	"net/http"
 
+	"github.com/hibiken/asynq"
 	"github.com/labstack/echo/v4"
+	"github.com/mkideal/cli"
 	"github.com/neoxelox/errors"
 
 	"github.com/neoxelox/kit/util"
 )
 
 var (
-	ErrHTTPErrorHandlerGeneric = errors.New("http error handler failed")
+	ErrErrorHandlerGeneric = errors.New("error handler failed")
 )
 
 var (
-	_HTTP_ERROR_HANDLER_DEFAULT_CONFIG = HTTPErrorHandlerConfig{
+	_ERROR_HANDLER_DEFAULT_CONFIG = ErrorHandlerConfig{
 		MinStatusCodeToLog: util.Pointer(http.StatusInternalServerError),
 	}
 )
 
-type HTTPErrorHandlerConfig struct {
+type ErrorHandlerConfig struct {
 	Environment        Environment
 	MinStatusCodeToLog *int
 }
 
-type HTTPErrorHandler struct {
-	config   HTTPErrorHandlerConfig
+type ErrorHandler struct {
+	config   ErrorHandlerConfig
 	observer *Observer
 }
 
-func NewHTTPErrorHandler(observer *Observer, config HTTPErrorHandlerConfig) *HTTPErrorHandler {
-	util.Merge(&config, _HTTP_ERROR_HANDLER_DEFAULT_CONFIG)
+func NewErrorHandler(observer *Observer, config ErrorHandlerConfig) *ErrorHandler {
+	util.Merge(&config, _ERROR_HANDLER_DEFAULT_CONFIG)
 
-	return &HTTPErrorHandler{
+	return &ErrorHandler{
 		observer: observer,
 		config:   config,
 	}
 }
 
-func (self *HTTPErrorHandler) Handle(err error, ctx echo.Context) {
+func (self *ErrorHandler) HandleRequest(err error, ctx echo.Context) {
 	// If response was already committed it means another middleware or an actual view
 	// has already called the error handler or has written an appropriate response.
 	if ctx.Response().Committed || err == nil {
@@ -83,9 +86,30 @@ func (self *HTTPErrorHandler) Handle(err error, ctx echo.Context) {
 
 	if err != nil {
 		self.observer.Error(ctx.Request().Context(),
-			ErrHTTPErrorHandlerGeneric.Raise().
+			ErrErrorHandlerGeneric.Raise().
 				With("cannot respond http error %s", httpError.Code()).
 				Extra(map[string]any{"http_error": httpError}).
 				Cause(err))
+	}
+}
+
+func (self *ErrorHandler) HandleTask(ctx context.Context, _ *asynq.Task, err error) {
+	if err == nil {
+		return
+	}
+
+	self.observer.Error(ctx, err)
+}
+
+func (self *ErrorHandler) HandleCommand(next RunnerHandler) RunnerHandler {
+	return func(ctx context.Context, command *cli.Context) error {
+		err := next(ctx, command)
+		if err != nil && err != cli.ExitError {
+			self.observer.Error(ctx, err)
+
+			return err
+		}
+
+		return nil
 	}
 }

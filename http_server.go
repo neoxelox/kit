@@ -64,7 +64,7 @@ type HTTPServer struct {
 }
 
 func NewHTTPServer(observer *Observer, serializer *Serializer, binder *Binder,
-	renderer *Renderer, httpErrorHandler *HTTPErrorHandler, config HTTPServerConfig) *HTTPServer {
+	renderer *Renderer, errorHandler *ErrorHandler, config HTTPServerConfig) *HTTPServer {
 	util.Merge(&config, _HTTP_SERVER_DEFAULT_CONFIG)
 
 	server := echo.New()
@@ -85,7 +85,7 @@ func NewHTTPServer(observer *Observer, serializer *Serializer, binder *Binder,
 	server.Binder = binder
 	server.Renderer = renderer
 	// server.Validator = nil // Can't fix nil but validator should always be at domain level
-	server.HTTPErrorHandler = httpErrorHandler.Handle
+	server.HTTPErrorHandler = errorHandler.HandleRequest
 	server.IPExtractor = *config.RequestIPExtractor
 
 	requestFilePattern := regexp.MustCompile(*config.RequestFilePattern)

@@ -39,11 +39,11 @@ type Runner struct {
 	config       RunnerConfig
 	observer     *Observer
 	runner       *cli.Command
+	errorHandler *ErrorHandler
 	middlewares  []func(RunnerHandler) RunnerHandler
-	errorHandler *_cliErrorHandler
 }
 
-func NewRunner(observer *Observer, config RunnerConfig) *Runner {
+func NewRunner(observer *Observer, errorHandler *ErrorHandler, config RunnerConfig) *Runner {
 	util.Merge(&config, _RUNNER_DEFAULT_CONFIG)
 
 	cli.SetUsageStyle(cli.NormalStyle)
@@ -79,8 +79,8 @@ func NewRunner(observer *Observer, config RunnerConfig) *Runner {
 		config:       config,
 		observer:     observer,
 		runner:       runner,
+		errorHandler: errorHandler,
 		middlewares:  middlewares,
-		errorHandler: _newCLIErrorHandler(observer),
 	}
 }
 
@@ -108,7 +108,7 @@ func (self *Runner) Register(command string, handler RunnerHandler, args any, de
 		Argv: func() any { return util.Copy(args) },
 		Fn: func(ctx *cli.Context) error {
 			// Error handler has to be the last middleware in order to use the possible traced context
-			handler = self.errorHandler.HandleError(handler)
+			handler = self.errorHandler.HandleCommand(handler)
 
 			for i := len(self.middlewares) - 1; i >= 0; i-- {
 				handler = self.middlewares[i](handler)
@@ -138,27 +138,4 @@ func (self *Runner) Close(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-type _cliErrorHandler struct {
-	observer *Observer
-}
-
-func _newCLIErrorHandler(observer *Observer) *_cliErrorHandler {
-	return &_cliErrorHandler{
-		observer: observer,
-	}
-}
-
-func (self _cliErrorHandler) HandleError(next RunnerHandler) RunnerHandler {
-	return func(ctx context.Context, command *cli.Context) error {
-		err := next(ctx, command)
-		if err != nil && err != cli.ExitError {
-			self.observer.Error(ctx, err)
-
-			return err
-		}
-
-		return nil
-	}
 }

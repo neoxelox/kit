@@ -69,7 +69,7 @@ type Worker struct {
 	scheduler *asynq.Scheduler
 }
 
-func NewWorker(observer *Observer, config WorkerConfig) *Worker {
+func NewWorker(observer *Observer, errorHandler *ErrorHandler, config WorkerConfig) *Worker {
 	util.Merge(&config, _WORKER_DEFAULT_CONFIG)
 
 	dsn := fmt.Sprintf(_WORKER_REDIS_DSN, config.CacheHost, config.CachePort)
@@ -99,8 +99,6 @@ func NewWorker(observer *Observer, config WorkerConfig) *Worker {
 		asynqLogLevel = asynq.InfoLevel
 	}
 
-	asynqErrorHandler := _newAsynqErrorHandler(observer)
-
 	serverConfig := asynq.Config{
 		Concurrency:     *config.Concurrency,
 		Queues:          config.Queues,
@@ -108,7 +106,7 @@ func NewWorker(observer *Observer, config WorkerConfig) *Worker {
 		ShutdownTimeout: *config.StopTimeout,
 		Logger:          asynqLogger,
 		LogLevel:        asynqLogLevel,
-		ErrorHandler:    asynq.ErrorHandlerFunc(asynqErrorHandler.HandleProcessError),
+		ErrorHandler:    asynq.ErrorHandlerFunc(errorHandler.HandleTask),
 	}
 
 	schedulerConfig := asynq.SchedulerOpts{
@@ -121,7 +119,9 @@ func NewWorker(observer *Observer, config WorkerConfig) *Worker {
 					"Enqueued task %s on queue %s with id %s", info.Type, info.Queue, info.ID)
 			}
 		},
-		EnqueueErrorHandler: asynqErrorHandler.HandleEnqueueError,
+		EnqueueErrorHandler: func(task *asynq.Task, opts []asynq.Option, err error) {
+			errorHandler.HandleTask(context.Background(), task, err)
+		},
 	}
 
 	return &Worker{
@@ -220,22 +220,4 @@ func (self _asynqLogger) Error(args ...any) {
 
 func (self _asynqLogger) Fatal(args ...any) {
 	self.observer.Fatal(context.Background(), args...)
-}
-
-type _asynqErrorHandler struct {
-	observer *Observer
-}
-
-func _newAsynqErrorHandler(observer *Observer) *_asynqErrorHandler {
-	return &_asynqErrorHandler{
-		observer: observer,
-	}
-}
-
-func (self _asynqErrorHandler) HandleProcessError(ctx context.Context, _ *asynq.Task, err error) {
-	self.observer.Error(ctx, err)
-}
-
-func (self _asynqErrorHandler) HandleEnqueueError(_ *asynq.Task, _ []asynq.Option, err error) {
-	self.observer.Error(context.Background(), err)
 }
