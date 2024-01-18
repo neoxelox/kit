@@ -188,10 +188,10 @@ func (self *Timeout) handlePanickedAfterTimeout(ctx *_timeoutHandlerCtx, rec any
 	if ctx.timeoutWriter.hasTimedOut {
 		err, ok := rec.(error)
 		if !ok {
-			err = kit.ErrServerGeneric.Raise().With("%v", rec)
+			err = kit.ErrHTTPServerGeneric.Raise().With("%v", rec)
 		}
 
-		err = kit.ErrServerTimedOut.Raise().With("after executing %s %s", ctx.handlerCtx.Request().Method,
+		err = kit.ErrHTTPServerTimedOut.Raise().With("after executing %s %s", ctx.handlerCtx.Request().Method,
 			ctx.handlerCtx.Request().RequestURI).Cause(err)
 
 		self.observer.Error(ctx.handlerCtx.Request().Context(), err)
@@ -204,7 +204,7 @@ func (self *Timeout) handleFinishedAfterTimeout(ctx *_timeoutHandlerCtx) {
 
 	// Log timeout error after timeout along with possible handler error
 	if ctx.timeoutWriter.hasTimedOut {
-		err := kit.ErrServerTimedOut.Raise().With("after executing %s %s", ctx.handlerCtx.Request().Method,
+		err := kit.ErrHTTPServerTimedOut.Raise().With("after executing %s %s", ctx.handlerCtx.Request().Method,
 			ctx.handlerCtx.Request().RequestURI).Cause(ctx.handlerError)
 
 		self.observer.Error(ctx.handlerCtx.Request().Context(), err)

@@ -15,8 +15,8 @@ import (
 )
 
 var (
-	ErrServerGeneric  = errors.New("server failed")
-	ErrServerTimedOut = errors.New("server timed out")
+	ErrHTTPServerGeneric  = errors.New("http server failed")
+	ErrHTTPServerTimedOut = errors.New("http server timed out")
 )
 
 var (
@@ -30,7 +30,7 @@ var (
 )
 
 var (
-	_SERVER_DEFAULT_CONFIG = ServerConfig{
+	_HTTP_SERVER_DEFAULT_CONFIG = HTTPServerConfig{
 		RequestHeaderMaxSize:     util.Pointer(1 << 10), // 1 KB
 		RequestBodyMaxSize:       util.Pointer(4 << 10), // 4 KB
 		RequestFileMaxSize:       util.Pointer(2 << 20), // 2 MB
@@ -43,7 +43,7 @@ var (
 	}
 )
 
-type ServerConfig struct {
+type HTTPServerConfig struct {
 	Environment              Environment
 	Port                     int
 	RequestHeaderMaxSize     *int
@@ -57,15 +57,15 @@ type ServerConfig struct {
 	ResponseWriteTimeout     *time.Duration
 }
 
-type Server struct {
-	config   ServerConfig
+type HTTPServer struct {
+	config   HTTPServerConfig
 	observer *Observer
 	server   *echo.Echo
 }
 
-func NewServer(observer *Observer, serializer *Serializer, binder *Binder,
-	renderer *Renderer, httpErrorHandler *HTTPErrorHandler, config ServerConfig) *Server {
-	util.Merge(&config, _SERVER_DEFAULT_CONFIG)
+func NewHTTPServer(observer *Observer, serializer *Serializer, binder *Binder,
+	renderer *Renderer, httpErrorHandler *HTTPErrorHandler, config HTTPServerConfig) *HTTPServer {
+	util.Merge(&config, _HTTP_SERVER_DEFAULT_CONFIG)
 
 	server := echo.New()
 
@@ -107,54 +107,54 @@ func NewServer(observer *Observer, serializer *Serializer, binder *Binder,
 		}
 	})
 
-	return &Server{
+	return &HTTPServer{
 		config:   config,
 		observer: observer,
 		server:   server,
 	}
 }
 
-func (self *Server) Run(ctx context.Context) error {
-	self.observer.Infof(ctx, "Server started at port %d", self.config.Port)
+func (self *HTTPServer) Run(ctx context.Context) error {
+	self.observer.Infof(ctx, "HTTP Server started at port %d", self.config.Port)
 
 	err := self.server.Start(fmt.Sprintf(":%d", self.config.Port))
 	if err != nil && err != http.ErrServerClosed {
-		return ErrServerGeneric.Raise().Cause(err)
+		return ErrHTTPServerGeneric.Raise().Cause(err)
 	}
 
 	return nil
 }
 
-func (self *Server) Use(middleware ...echo.MiddlewareFunc) {
+func (self *HTTPServer) Use(middleware ...echo.MiddlewareFunc) {
 	self.server.Pre(middleware...)
 }
 
-func (self *Server) Host(host string, middleware ...echo.MiddlewareFunc) *echo.Group {
+func (self *HTTPServer) Host(host string, middleware ...echo.MiddlewareFunc) *echo.Group {
 	return self.server.Host(host, middleware...)
 }
 
-func (self *Server) Default(middleware ...echo.MiddlewareFunc) *echo.Group {
+func (self *HTTPServer) Default(middleware ...echo.MiddlewareFunc) *echo.Group {
 	return self.server.Group("", middleware...)
 }
 
-func (self *Server) Close(ctx context.Context) error {
+func (self *HTTPServer) Close(ctx context.Context) error {
 	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
-		self.observer.Info(ctx, "Closing server")
+		self.observer.Info(ctx, "Closing HTTP server")
 
 		self.server.Server.SetKeepAlivesEnabled(false)
 
 		err := self.server.Shutdown(ctx)
 		if err != nil {
-			return ErrServerGeneric.Raise().Cause(err)
+			return ErrHTTPServerGeneric.Raise().Cause(err)
 		}
 
-		self.observer.Info(ctx, "Closed server")
+		self.observer.Info(ctx, "Closed HTTP server")
 
 		return nil
 	})
 	if err != nil {
 		if util.ErrDeadlineExceeded.Is(err) {
-			return ErrServerTimedOut.Raise().Cause(err)
+			return ErrHTTPServerTimedOut.Raise().Cause(err)
 		}
 
 		return err
