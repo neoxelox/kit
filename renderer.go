@@ -10,47 +10,54 @@ import (
 	"regexp"
 
 	"github.com/labstack/echo/v4"
+	"github.com/neoxelox/errors"
+
+	"github.com/neoxelox/kit/util"
+)
+
+// TODO: enhance rendering with templ
+
+var (
+	ErrRendererGeneric = errors.New("renderer failed")
 )
 
 var (
-	_RENDERER_DEFAULT_TEMPLATES_PATH      = "./templates"
-	_RENDERER_DEFAULT_TEMPLATE_EXTENSIONS = regexp.MustCompile(`^.*\.(html|txt|md)$`)
+	_RENDERER_DEFAULT_CONFIG = RendererConfig{
+		TemplatesPath:       util.Pointer("./templates"),
+		TemplateFilePattern: util.Pointer(`^.*\.(html|txt|md)$`),
+	}
 )
 
 type RendererConfig struct {
-	TemplatesPath      *string
-	TemplateExtensions *regexp.Regexp
+	TemplatesPath       *string
+	TemplateFilePattern *string
 }
 
 type Renderer struct {
 	config   RendererConfig
-	observer Observer
+	observer *Observer
 	renderer *template.Template
 }
 
-func NewRenderer(observer Observer, config RendererConfig) (*Renderer, error) {
-	if config.TemplatesPath == nil {
-		config.TemplatesPath = ptr(_RENDERER_DEFAULT_TEMPLATES_PATH)
-	}
-
-	if config.TemplateExtensions == nil {
-		config.TemplateExtensions = _RENDERER_DEFAULT_TEMPLATE_EXTENSIONS.Copy()
-	}
+func NewRenderer(observer *Observer, config RendererConfig) (*Renderer, error) {
+	util.Merge(&config, _RENDERER_DEFAULT_CONFIG)
 
 	*config.TemplatesPath = filepath.Clean(*config.TemplatesPath)
+
+	extensions := regexp.MustCompile(*config.TemplateFilePattern)
 
 	renderer := template.New("")
 
 	err := filepath.WalkDir(*config.TemplatesPath, func(path string, info fs.DirEntry, err error) error {
 		if err != nil {
-			return ErrRendererGeneric().WrapAs(err)
+			return ErrRendererGeneric.Raise().Cause(err)
 		}
 
 		if info.IsDir() {
 			return nil
 		}
 
-		if !config.TemplateExtensions.MatchString(info.Name()) {
+		if !extensions.MatchString(info.Name()) {
 			return nil
 		}
 
@@ -58,18 +65,18 @@ func NewRenderer(observer Observer, config RendererConfig) (*Renderer, error) {
 
 		file, err := ioutil.ReadFile(path)
 		if err != nil {
-			return ErrRendererGeneric().WrapAs(err)
+			return ErrRendererGeneric.Raise().Cause(err)
 		}
 
 		_, err = renderer.New(name).Parse(string(file))
 		if err != nil {
-			return ErrRendererGeneric().WrapAs(err)
+			return ErrRendererGeneric.Raise().Cause(err)
 		}
 
 		return nil
 	})
 	if err != nil {
-		return nil, ErrRendererGeneric().Wrap(err)
+		return nil, err
 	}
 
 	return &Renderer{
@@ -79,39 +86,39 @@ func NewRenderer(observer Observer, config RendererConfig) (*Renderer, error) {
 	}, nil
 }
 
-func (self *Renderer) Render(w io.Writer, name string, data any, c echo.Context) error { // nolint
+func (self *Renderer) Render(w io.Writer, name string, data any, _ echo.Context) error {
 	err := self.renderer.ExecuteTemplate(w, name, data)
 	if err != nil {
-		return ErrRendererGeneric().Wrap(err)
+		return ErrRendererGeneric.Raise().Extra(map[string]any{"template": name}).Cause(err)
 	}
 
 	return nil
 }
 
-func (self *Renderer) RenderWriter(w io.Writer, template string, data any) error { // nolint
+func (self *Renderer) RenderWriter(w io.Writer, template string, data any) error {
 	err := self.renderer.ExecuteTemplate(w, template, data)
 	if err != nil {
-		return ErrRendererGeneric().Wrap(err)
+		return ErrRendererGeneric.Raise().Extra(map[string]any{"template": template}).Cause(err)
 	}
 
 	return nil
 }
 
-func (self *Renderer) RenderBytes(template string, data any) ([]byte, error) { // nolint
+func (self *Renderer) RenderBytes(template string, data any) ([]byte, error) {
 	var w bytes.Buffer
 
 	err := self.RenderWriter(&w, template, data)
 	if err != nil {
-		return nil, ErrRendererGeneric().Wrap(err)
+		return nil, err
 	}
 
 	return w.Bytes(), nil
 }
 
-func (self *Renderer) RenderString(template string, data any) (string, error) { // nolint
-	bytes, err := self.RenderBytes(template, data) // nolint
+func (self *Renderer) RenderString(template string, data any) (string, error) {
+	bytes, err := self.RenderBytes(template, data)
 	if err != nil {
-		return "", ErrRendererGeneric().Wrap(err)
+		return "", err
 	}
 
 	return string(bytes), nil

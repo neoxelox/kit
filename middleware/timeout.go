@@ -1,20 +1,25 @@
 package middleware
 
 // Heavily inspired by https://github.com/rookie-ninja/rk-echo/blob/master/middleware/timeout/middleware.go
-// FIXME: Below 1ms difference between timeout and view handler finalization there is a response write datarace
+
+// TODO: Below 1ms difference between timeout and view handler finalization there is a response write datarace
+// also it is too complex and some parts are not good for performance, it needs a refactor
 
 import (
 	"bytes"
 	"context"
-	"fmt"
+	"net/http"
 	"sync"
 	"time"
-
-	"net/http"
 
 	"github.com/labstack/echo/v4"
 
 	"github.com/neoxelox/kit"
+	"github.com/neoxelox/kit/util"
+)
+
+var (
+	_TIMEOUT_MIDDLEWARE_DEFAULT_CONFIG = TimeoutConfig{}
 )
 
 type TimeoutConfig struct {
@@ -23,10 +28,12 @@ type TimeoutConfig struct {
 
 type Timeout struct {
 	config   TimeoutConfig
-	observer kit.Observer
+	observer *kit.Observer
 }
 
-func NewTimeout(observer kit.Observer, config TimeoutConfig) *Timeout {
+func NewTimeout(observer *kit.Observer, config TimeoutConfig) *Timeout {
+	util.Merge(&config, _TIMEOUT_MIDDLEWARE_DEFAULT_CONFIG)
+
 	return &Timeout{
 		config:   config,
 		observer: observer,
@@ -52,7 +59,7 @@ func (self *Timeout) Handle(next echo.HandlerFunc) echo.HandlerFunc {
 				if rec := recover(); rec != nil {
 					panicChan <- rec
 
-					// Handler panicked after timeout
+					// Maybe handler panicked after timeout
 					self.handlePanickedAfterTimeout(timeoutHandlerCtx, rec)
 				}
 			}()
@@ -62,12 +69,12 @@ func (self *Timeout) Handle(next echo.HandlerFunc) echo.HandlerFunc {
 
 			finishChan <- struct{}{}
 
-			// Handler finished after timeout
+			// Maybe handler finished after timeout
 			self.handleFinishedAfterTimeout(timeoutHandlerCtx)
 		}()
 
 		select {
-		// Handler panicked
+		// Handler panicked on time
 		case rec := <-panicChan:
 			self.handlePanicked(timeoutHandlerCtx)
 			// Repanic so upwards middlewares are aware of it
@@ -122,7 +129,7 @@ func (self *Timeout) handlePanicked(ctx *_timeoutHandlerCtx) {
 }
 
 func (self *Timeout) handleFinished(ctx *_timeoutHandlerCtx) {
-	// Handle, serialize and write handler exception response to timeout writer
+	// Pass error to the error handler to serialize and write error response to timeout writer
 	if ctx.handlerError != nil {
 		ctx.handlerCtx.Error(ctx.handlerError)
 	}
@@ -165,11 +172,11 @@ func (self *Timeout) handleTimeout(ctx *_timeoutHandlerCtx) {
 	// Switch to original writer (Because nothing was written to timeout writer yet)
 	ctx.handlerCtx.Response().Writer = ctx.originalWriter
 
-	// Handle, serialize and write timeout exception response to original writer
+	// Pass timeout error to the error handler to serialize and write error response to original writer
 	ctx.handlerCtx.Error(http.ErrHandlerTimeout)
 
 	// Switch back to timeout writer so that handler code executed after the timeout
-	// cannot write to original writer anymore (it is ignored in the implementation)
+	// does not write to original writer anymore (it is ignored in the implementation)
 	ctx.handlerCtx.Response().Writer = ctx.timeoutWriter
 }
 
@@ -177,14 +184,15 @@ func (self *Timeout) handlePanickedAfterTimeout(ctx *_timeoutHandlerCtx, rec any
 	ctx.timeoutWriter.mutex.Lock()
 	defer ctx.timeoutWriter.mutex.Unlock()
 
+	// Log panicked error after timeout
 	if ctx.timeoutWriter.hasTimedOut {
 		err, ok := rec.(error)
 		if !ok {
-			err = kit.ErrServerGeneric().With(fmt.Sprint(rec))
+			err = kit.ErrHTTPServerGeneric.Raise().With("%v", rec)
 		}
 
-		err = kit.ErrServerTimedOut().Withf("after executing %s %s", ctx.handlerCtx.Request().Method,
-			ctx.handlerCtx.Request().RequestURI).Wrap(err)
+		err = kit.ErrHTTPServerTimedOut.Raise().With("after executing %s %s", ctx.handlerCtx.Request().Method,
+			ctx.handlerCtx.Request().RequestURI).Cause(err)
 
 		self.observer.Error(ctx.handlerCtx.Request().Context(), err)
 	}
@@ -194,11 +202,11 @@ func (self *Timeout) handleFinishedAfterTimeout(ctx *_timeoutHandlerCtx) {
 	ctx.timeoutWriter.mutex.Lock()
 	defer ctx.timeoutWriter.mutex.Unlock()
 
+	// Log timeout error after timeout along with possible handler error
 	if ctx.timeoutWriter.hasTimedOut {
-		err := kit.ErrServerTimedOut().Withf("after executing %s %s", ctx.handlerCtx.Request().Method,
-			ctx.handlerCtx.Request().RequestURI).Wrap(ctx.handlerError)
+		err := kit.ErrHTTPServerTimedOut.Raise().With("after executing %s %s", ctx.handlerCtx.Request().Method,
+			ctx.handlerCtx.Request().RequestURI).Cause(ctx.handlerError)
 
-		// TODO: maybe not log it as an error because we already log the TIMEOUT one?
 		self.observer.Error(ctx.handlerCtx.Request().Context(), err)
 	}
 }
@@ -217,7 +225,7 @@ func (self *_bufferPool) Get() *bytes.Buffer {
 		return &bytes.Buffer{}
 	}
 
-	return buf.(*bytes.Buffer) // nolint
+	return buf.(*bytes.Buffer)
 }
 
 func (self *_bufferPool) Put(buf *bytes.Buffer) {
@@ -250,7 +258,7 @@ func (self *_timeoutResponseWriter) Write(body []byte) (int, error) {
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
 
-	return self.body.Write(body) // nolint
+	return self.body.Write(body)
 }
 
 func (self *_timeoutResponseWriter) WriteHeader(statusCode int) {

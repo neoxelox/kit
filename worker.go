@@ -9,6 +9,9 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/neoxelox/errors"
+
+	"github.com/neoxelox/kit/util"
 )
 
 const (
@@ -16,14 +19,8 @@ const (
 )
 
 var (
-	_WORKER_DEFAULT_MAX_CONNS       = 10 * runtime.GOMAXPROCS(-1)
-	_WORKER_DEFAULT_READ_TIMEOUT    = 30 * time.Second
-	_WORKER_DEFAULT_WRITE_TIMEOUT   = 30 * time.Second
-	_WORKER_DEFAULT_DIAL_TIMEOUT    = 30 * time.Second
-	_WORKER_DEFAULT_CONCURRENCY     = 1 * runtime.GOMAXPROCS(-1)
-	_WORKER_DEFAULT_STRICT_PRIORITY = false
-	_WORKER_DEFAULT_STOP_TIMEOUT    = 30 * time.Second
-	_WORKER_DEFAULT_TIME_ZONE       = time.UTC
+	ErrWorkerGeneric  = errors.New("worker failed")
+	ErrWorkerTimedOut = errors.New("worker timed out")
 )
 
 var _KlevelToAlevel = map[Level]asynq.LogLevel{
@@ -35,62 +32,45 @@ var _KlevelToAlevel = map[Level]asynq.LogLevel{
 	LvlNone:  asynq.FatalLevel,
 }
 
+var (
+	_WORKER_DEFAULT_CONFIG = WorkerConfig{
+		Concurrency:       util.Pointer(4 * runtime.GOMAXPROCS(-1)),
+		StrictPriority:    util.Pointer(false),
+		StopTimeout:       util.Pointer(30 * time.Second),
+		TimeZone:          time.UTC,
+		CacheMaxConns:     util.Pointer(max(8, 4*runtime.GOMAXPROCS(-1))),
+		CacheReadTimeout:  util.Pointer(30 * time.Second),
+		CacheWriteTimeout: util.Pointer(30 * time.Second),
+		CacheDialTimeout:  util.Pointer(30 * time.Second),
+	}
+)
+
 type WorkerConfig struct {
-	CacheHost            string
-	CachePort            int
-	CacheSSLMode         bool
-	CachePassword        string
-	CacheMaxConns        *int
-	CacheReadTimeout     *time.Duration
-	CacheWriteTimeout    *time.Duration
-	CacheDialTimeout     *time.Duration
-	WorkerQueues         map[string]int
-	WorkerConcurrency    *int
-	WorkerStrictPriority *bool
-	WorkerStopTimeout    *time.Duration
-	WorkerTimeZone       *time.Location
+	Queues            map[string]int
+	Concurrency       *int
+	StrictPriority    *bool
+	StopTimeout       *time.Duration
+	TimeZone          *time.Location
+	CacheHost         string
+	CachePort         int
+	CacheSSLMode      bool
+	CachePassword     string
+	CacheMaxConns     *int
+	CacheReadTimeout  *time.Duration
+	CacheWriteTimeout *time.Duration
+	CacheDialTimeout  *time.Duration
 }
 
 type Worker struct {
 	config    WorkerConfig
-	observer  Observer
+	observer  *Observer
 	server    *asynq.Server
 	register  *asynq.ServeMux
 	scheduler *asynq.Scheduler
 }
 
-func NewWorker(observer Observer, config WorkerConfig) *Worker {
-	if config.CacheMaxConns == nil {
-		config.CacheMaxConns = ptr(_WORKER_DEFAULT_MAX_CONNS)
-	}
-
-	if config.CacheReadTimeout == nil {
-		config.CacheReadTimeout = ptr(_WORKER_DEFAULT_READ_TIMEOUT)
-	}
-
-	if config.CacheWriteTimeout == nil {
-		config.CacheWriteTimeout = ptr(_WORKER_DEFAULT_WRITE_TIMEOUT)
-	}
-
-	if config.CacheDialTimeout == nil {
-		config.CacheDialTimeout = ptr(_WORKER_DEFAULT_DIAL_TIMEOUT)
-	}
-
-	if config.WorkerConcurrency == nil {
-		config.WorkerConcurrency = ptr(_WORKER_DEFAULT_CONCURRENCY)
-	}
-
-	if config.WorkerStrictPriority == nil {
-		config.WorkerStrictPriority = ptr(_WORKER_DEFAULT_STRICT_PRIORITY)
-	}
-
-	if config.WorkerStopTimeout == nil {
-		config.WorkerStopTimeout = ptr(_WORKER_DEFAULT_STOP_TIMEOUT)
-	}
-
-	if config.WorkerTimeZone == nil {
-		config.WorkerTimeZone = _WORKER_DEFAULT_TIME_ZONE
-	}
+func NewWorker(observer *Observer, errorHandler *ErrorHandler, config WorkerConfig) *Worker {
+	util.Merge(&config, _WORKER_DEFAULT_CONFIG)
 
 	dsn := fmt.Sprintf(_WORKER_REDIS_DSN, config.CacheHost, config.CachePort)
 
@@ -111,7 +91,7 @@ func NewWorker(observer Observer, config WorkerConfig) *Worker {
 		PoolSize:     *config.CacheMaxConns,
 	}
 
-	asynqLogger := _newAsynqLogger(&observer)
+	asynqLogger := _newAsynqLogger(observer)
 	asynqLogLevel := _KlevelToAlevel[asynqLogger.observer.Level()]
 
 	// Asynq debug level is too much!
@@ -119,20 +99,18 @@ func NewWorker(observer Observer, config WorkerConfig) *Worker {
 		asynqLogLevel = asynq.InfoLevel
 	}
 
-	asynqErrorHandler := _newAsynqErrorHandler(&observer)
-
 	serverConfig := asynq.Config{
-		Concurrency:     *config.WorkerConcurrency,
-		Queues:          config.WorkerQueues,
-		StrictPriority:  *config.WorkerStrictPriority,
-		ShutdownTimeout: *config.WorkerStopTimeout,
+		Concurrency:     *config.Concurrency,
+		Queues:          config.Queues,
+		StrictPriority:  *config.StrictPriority,
+		ShutdownTimeout: *config.StopTimeout,
 		Logger:          asynqLogger,
 		LogLevel:        asynqLogLevel,
-		ErrorHandler:    asynq.ErrorHandlerFunc(asynqErrorHandler.HandleProcessError),
+		ErrorHandler:    asynq.ErrorHandlerFunc(errorHandler.HandleTask),
 	}
 
 	schedulerConfig := asynq.SchedulerOpts{
-		Location: config.WorkerTimeZone,
+		Location: config.TimeZone,
 		Logger:   asynqLogger,
 		LogLevel: asynqLogLevel,
 		PostEnqueueFunc: func(info *asynq.TaskInfo, err error) {
@@ -141,7 +119,9 @@ func NewWorker(observer Observer, config WorkerConfig) *Worker {
 					"Enqueued task %s on queue %s with id %s", info.Type, info.Queue, info.ID)
 			}
 		},
-		EnqueueErrorHandler: asynqErrorHandler.HandleEnqueueError,
+		EnqueueErrorHandler: func(task *asynq.Task, opts []asynq.Option, err error) {
+			errorHandler.HandleTask(context.Background(), task, err)
+		},
 	}
 
 	return &Worker{
@@ -154,16 +134,16 @@ func NewWorker(observer Observer, config WorkerConfig) *Worker {
 }
 
 func (self *Worker) Run(ctx context.Context) error {
-	self.observer.Infof(ctx, "Worker started with queues %v", self.config.WorkerQueues)
+	self.observer.Infof(ctx, "Worker started with queues %v", self.config.Queues)
 
 	err := self.server.Start(self.register)
 	if err != nil && err != asynq.ErrServerClosed {
-		return ErrWorkerGeneric().Wrap(err)
+		return ErrWorkerGeneric.Raise().Cause(err)
 	}
 
 	err = self.scheduler.Start()
 	if err != nil {
-		return ErrWorkerGeneric().Wrap(err)
+		return ErrWorkerGeneric.Raise().Cause(err)
 	}
 
 	return nil
@@ -190,7 +170,7 @@ func (self *Worker) Schedule(task string, params any, cron string, options ...as
 }
 
 func (self *Worker) Close(ctx context.Context) error {
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		self.observer.Info(ctx, "Closing worker")
 
 		self.scheduler.Shutdown()
@@ -201,14 +181,15 @@ func (self *Worker) Close(ctx context.Context) error {
 
 		return nil
 	})
-	switch {
-	case err == nil:
-		return nil
-	case ErrDeadlineExceeded().Is(err):
-		return ErrWorkerTimedOut()
-	default:
-		return ErrWorkerGeneric().Wrap(err)
+	if err != nil {
+		if util.ErrDeadlineExceeded.Is(err) {
+			return ErrWorkerTimedOut.Raise().Cause(err)
+		}
+
+		return err
 	}
+
+	return nil
 }
 
 type _asynqLogger struct {
@@ -239,26 +220,4 @@ func (self _asynqLogger) Error(args ...any) {
 
 func (self _asynqLogger) Fatal(args ...any) {
 	self.observer.Fatal(context.Background(), args...)
-}
-
-type _asynqErrorHandler struct {
-	observer *Observer
-}
-
-func _newAsynqErrorHandler(observer *Observer) *_asynqErrorHandler {
-	return &_asynqErrorHandler{
-		observer: observer,
-	}
-}
-
-func (self _asynqErrorHandler) handleError(ctx context.Context, task *asynq.Task, err error) {
-	self.observer.Errorf(ctx, "%s: %v", task.Type(), err)
-}
-
-func (self _asynqErrorHandler) HandleProcessError(ctx context.Context, task *asynq.Task, err error) {
-	self.handleError(ctx, task, err)
-}
-
-func (self _asynqErrorHandler) HandleEnqueueError(task *asynq.Task, _ []asynq.Option, err error) {
-	self.handleError(context.Background(), task, err)
 }

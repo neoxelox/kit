@@ -8,21 +8,28 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/neoxelox/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/diode"
+
+	"github.com/neoxelox/kit/util"
 )
 
 const (
-	_LOGGER_DEFAULT_SKIP_FRAME_COUNT = 1
-	_LOGGER_LEVEL_FIELD_NAME         = "level"
-	_LOGGER_MESSAGE_FIELD_NAME       = "message"
-	_LOGGER_APP_FIELD_NAME           = "app"
-	_LOGGER_TIMESTAMP_FIELD_NAME     = "timestamp"
-	_LOGGER_TIMESTAMP_FIELD_FORMAT   = zerolog.TimeFormatUnix
-	_LOGGER_CALLER_FIELD_NAME        = "caller"
-	_LOGGER_WRITER_SIZE              = 1000
-	_LOGGER_POLL_INTERVAL            = 10 * time.Millisecond
-	_LOGGER_FLUSH_DELAY              = _LOGGER_POLL_INTERVAL * 10
+	_LOGGER_LEVEL_FIELD_NAME       = "level"
+	_LOGGER_MESSAGE_FIELD_NAME     = "message"
+	_LOGGER_SERVICE_FIELD_NAME     = "service"
+	_LOGGER_TIMESTAMP_FIELD_NAME   = "timestamp"
+	_LOGGER_TIMESTAMP_FIELD_FORMAT = zerolog.TimeFormatUnix
+	_LOGGER_CALLER_FIELD_NAME      = "caller"
+	_LOGGER_WRITER_SIZE            = 1000
+	_LOGGER_POLL_INTERVAL          = 10 * time.Millisecond
+	_LOGGER_FLUSH_DELAY            = _LOGGER_POLL_INTERVAL * 10
+)
+
+var (
+	ErrLoggerGeneric  = errors.New("logger failed")
+	ErrLoggerTimedOut = errors.New("logger timed out")
 )
 
 var _KlevelToZlevel = map[Level]zerolog.Level{
@@ -34,15 +41,32 @@ var _KlevelToZlevel = map[Level]zerolog.Level{
 	LvlNone:  zerolog.Disabled,
 }
 
+var (
+	_LOGGER_DEFAULT_CONFIG = LoggerConfig{
+		SkipFrameCount: util.Pointer(1),
+	}
+)
+
+type Level int
+
+var (
+	LvlTrace Level = -5
+	LvlDebug Level = -4
+	LvlInfo  Level = -3
+	LvlWarn  Level = -2
+	LvlError Level = -1
+	LvlNone  Level
+)
+
 type LoggerConfig struct {
-	AppName        string
 	Level          Level
+	Service        string
 	SkipFrameCount *int
 }
 
 type Logger struct {
-	logger         *zerolog.Logger
 	config         LoggerConfig
+	logger         *zerolog.Logger
 	out            io.Writer
 	prefix         string
 	header         string
@@ -52,29 +76,27 @@ type Logger struct {
 }
 
 func NewLogger(config LoggerConfig) *Logger {
+	util.Merge(&config, _LOGGER_DEFAULT_CONFIG)
+
 	zerolog.LevelFieldName = _LOGGER_LEVEL_FIELD_NAME
 	zerolog.MessageFieldName = _LOGGER_MESSAGE_FIELD_NAME
 	zerolog.TimestampFieldName = _LOGGER_TIMESTAMP_FIELD_NAME
 	zerolog.TimeFieldFormat = _LOGGER_TIMESTAMP_FIELD_FORMAT
 	zerolog.CallerFieldName = _LOGGER_CALLER_FIELD_NAME
 
-	if config.SkipFrameCount == nil {
-		config.SkipFrameCount = ptr(_LOGGER_DEFAULT_SKIP_FRAME_COUNT)
-	}
-
 	_, file, line, _ := runtime.Caller(0)
 
 	out := diode.NewWriter(os.Stdout, _LOGGER_WRITER_SIZE, _LOGGER_POLL_INTERVAL, func(missed int) {
 		fmt.Fprintf(os.Stdout,
 			"{\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":\"%s:%d\",\"%s\":%d,\"%s\":\"Logger dropped %d messages\"}\n",
-			zerolog.LevelFieldName, zerolog.ErrorLevel, _LOGGER_APP_FIELD_NAME,
-			config.AppName, zerolog.CallerFieldName, file, line, zerolog.TimestampFieldName,
+			zerolog.LevelFieldName, zerolog.ErrorLevel, _LOGGER_SERVICE_FIELD_NAME,
+			config.Service, zerolog.CallerFieldName, file, line, zerolog.TimestampFieldName,
 			time.Now().Unix(), zerolog.MessageFieldName, missed)
 	})
 
 	// Do not use Caller hook as runtime.Caller makes the logger up to 2.6x slower
 	logger := zerolog.New(out).With().
-		Str(_LOGGER_APP_FIELD_NAME, config.AppName).
+		Str(_LOGGER_SERVICE_FIELD_NAME, config.Service).
 		Timestamp().
 		Logger().
 		Level(_KlevelToZlevel[config.Level])
@@ -84,7 +106,7 @@ func NewLogger(config LoggerConfig) *Logger {
 		config:         config,
 		level:          config.Level,
 		out:            &out,
-		prefix:         config.AppName,
+		prefix:         config.Service,
 		header:         "",
 		verbose:        LvlDebug >= config.Level,
 		skipFrameCount: *config.SkipFrameCount,
@@ -96,54 +118,57 @@ func (self Logger) Logger() *zerolog.Logger {
 }
 
 func (self Logger) Flush(ctx context.Context) error {
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
+		// Wait for last minute logs
 		time.Sleep(_LOGGER_FLUSH_DELAY)
 		os.Stdout.Sync()
 		os.Stderr.Sync()
 
 		return nil
 	})
-	switch {
-	case err == nil:
-		return nil
-	case ErrDeadlineExceeded().Is(err):
-		return ErrLoggerTimedOut()
-	default:
-		return ErrLoggerGeneric().Wrap(err)
+	if err != nil {
+		if util.ErrDeadlineExceeded.Is(err) {
+			return ErrLoggerTimedOut.Raise().Cause(err)
+		}
+
+		return err
 	}
+
+	return nil
 }
 
 func (self Logger) Close(ctx context.Context) error {
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		self.Info("Closing logger")
 
 		err := self.Flush(ctx)
 		if err != nil {
-			return ErrLoggerGeneric().WrapAs(err)
+			return err
 		}
 
 		writer, ok := self.out.(*diode.Writer)
 		if !ok {
-			panic("logger writer is not diode")
+			return ErrLoggerGeneric.Raise().With("logger writer %T is not diode", writer)
 		}
 
 		err = writer.Close()
 		if err != nil {
-			return ErrLoggerGeneric().WrapAs(err)
+			return ErrLoggerGeneric.Raise().Cause(err)
 		}
 
 		self.Info("Closed logger")
 
 		return nil
 	})
-	switch {
-	case err == nil:
-		return nil
-	case ErrDeadlineExceeded().Is(err):
-		return ErrLoggerTimedOut()
-	default:
-		return ErrLoggerGeneric().Wrap(err)
+	if err != nil {
+		if util.ErrDeadlineExceeded.Is(err) {
+			return ErrLoggerTimedOut.Raise().Cause(err)
+		}
+
+		return err
 	}
+
+	return nil
 }
 
 func (self Logger) Output() io.Writer {
@@ -163,7 +188,7 @@ func (self *Logger) SetPrefix(p string) {
 	self.prefix = p
 }
 
-func (self Logger) Level() Level { // nolint
+func (self Logger) Level() Level {
 	return self.level
 }
 
@@ -220,14 +245,21 @@ func (self Logger) Warnf(format string, i ...any) {
 	self.logger.Warn().Caller(self.skipFrameCount).Msgf(format, i...)
 }
 
+// nolint:forbidigo
 func (self Logger) printDebugError(i ...any) {
 	if len(i) >= 1 {
 		switch err := i[0].(type) {
-		case *Error:
-			fmt.Printf("\x1b[91m%+v\x1b[0m\n", err.Unwrap()) // nolint
+		case errors.Error:
+			fmt.Printf("%+v", err)
 			i = i[1:]
-		case *Exception:
-			fmt.Printf("\x1b[91m%+v\x1b[0m\n", err.Unwrap()) // nolint
+		case *errors.Error:
+			fmt.Printf("%+v", err)
+			i = i[1:]
+		case HTTPError:
+			fmt.Printf("%+v", err)
+			i = i[1:]
+		case *HTTPError:
+			fmt.Printf("%+v", err)
 			i = i[1:]
 		}
 	}
@@ -236,7 +268,7 @@ func (self Logger) printDebugError(i ...any) {
 		return
 	}
 
-	fmt.Printf("\x1b[91m%s\x1b[0m\n", fmt.Sprint(i...)) // nolint
+	fmt.Printf("\x1b[1;91m%s\x1b[0m\n", fmt.Sprint(i...))
 }
 
 func (self Logger) Error(i ...any) {
@@ -258,8 +290,9 @@ func (self Logger) Errorf(format string, i ...any) {
 func (self Logger) Fatal(i ...any) {
 	if LvlDebug >= self.level {
 		self.printDebugError(i...)
-		os.Exit(1) // nolint
-	} else { // nolint
+		// Allow fast exitting only on debug level
+		os.Exit(1) // nolint:revive
+	} else { // nolint:revive
 		self.logger.Fatal().Caller(self.skipFrameCount).Msg(fmt.Sprint(i...))
 	}
 }
@@ -267,8 +300,9 @@ func (self Logger) Fatal(i ...any) {
 func (self Logger) Fatalf(format string, i ...any) {
 	if LvlDebug >= self.level {
 		self.printDebugError(fmt.Sprintf(format, i...))
-		os.Exit(1) // nolint
-	} else { // nolint
+		// Allow fast exitting only on debug level
+		os.Exit(1) // nolint:revive
+	} else { // nolint:revive
 		self.logger.Fatal().Caller(self.skipFrameCount).Msgf(format, i...)
 	}
 }
@@ -276,8 +310,9 @@ func (self Logger) Fatalf(format string, i ...any) {
 func (self Logger) Panic(i ...any) {
 	if LvlDebug >= self.level {
 		self.printDebugError(i...)
+		// Allow panicking only on debug level
 		panic(fmt.Sprint(i...))
-	} else {
+	} else { // nolint:revive
 		self.logger.Panic().Caller(self.skipFrameCount).Msg(fmt.Sprint(i...))
 	}
 }
@@ -285,8 +320,9 @@ func (self Logger) Panic(i ...any) {
 func (self Logger) Panicf(format string, i ...any) {
 	if LvlDebug >= self.level {
 		self.printDebugError(fmt.Sprintf(format, i...))
+		// Allow panicking only on debug level
 		panic(fmt.Sprintf(format, i...))
-	} else {
+	} else { // nolint:revive
 		self.logger.Panic().Caller(self.skipFrameCount).Msgf(format, i...)
 	}
 }

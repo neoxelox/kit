@@ -7,8 +7,12 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/neoxelox/errors"
+
 	"github.com/go-redis/cache/v8"
 	"github.com/go-redis/redis/v8"
+
+	"github.com/neoxelox/kit/util"
 )
 
 const (
@@ -16,100 +20,62 @@ const (
 )
 
 var (
-	_CACHE_DEFAULT_MIN_CONNS           = 1
-	_CACHE_DEFAULT_MAX_CONNS           = 10 * runtime.GOMAXPROCS(-1)
-	_CACHE_DEFAULT_MAX_CONN_IDLE_TIME  = 30 * time.Minute
-	_CACHE_DEFAULT_MAX_CONN_LIFE_TIME  = 1 * time.Hour
-	_CACHE_DEFAULT_READ_TIMEOUT        = 30 * time.Second
-	_CACHE_DEFAULT_WRITE_TIMEOUT       = 30 * time.Second
-	_CACHE_DEFAULT_DIAL_TIMEOUT        = 30 * time.Second
-	_CACHE_DEFAULT_ACQUIRE_TIMEOUT     = 30 * time.Second
-	_CACHE_DEFAULT_RETRY_ATTEMPTS      = 1
-	_CACHE_DEFAULT_RETRY_INITIAL_DELAY = 0 * time.Second
-	_CACHE_DEFAULT_RETRY_LIMIT_DELAY   = 0 * time.Second
+	ErrCacheGeneric   = errors.New("cache failed")
+	ErrCacheTimedOut  = errors.New("cache timed out")
+	ErrCacheUnhealthy = errors.New("cache unhealthy")
+	ErrCacheMiss      = errors.New("cache key not found")
 )
 
-type CacheRetryConfig struct {
-	Attempts     int
-	InitialDelay time.Duration
-	LimitDelay   time.Duration
-}
+var (
+	_CACHE_DEFAULT_CONFIG = CacheConfig{
+		MinConns:        util.Pointer(1),
+		MaxConns:        util.Pointer(max(8, 4*runtime.GOMAXPROCS(-1))),
+		MaxConnIdleTime: util.Pointer(30 * time.Minute),
+		MaxConnLifeTime: util.Pointer(1 * time.Hour),
+		ReadTimeout:     util.Pointer(30 * time.Second),
+		WriteTimeout:    util.Pointer(30 * time.Second),
+		DialTimeout:     util.Pointer(30 * time.Second),
+	}
 
-type CacheLocalConfig struct {
-	Size int
-	TTL  time.Duration
-}
+	_CACHE_DEFAULT_RETRY_CONFIG = RetryConfig{
+		Attempts:     1,
+		InitialDelay: 0 * time.Second,
+		LimitDelay:   0 * time.Second,
+		Retriables:   []error{},
+	}
+)
 
 type CacheConfig struct {
-	CacheHost            string
-	CachePort            int
-	CacheSSLMode         bool
-	CachePassword        string
-	CacheMinConns        *int
-	CacheMaxConns        *int
-	CacheMaxConnIdleTime *time.Duration
-	CacheMaxConnLifeTime *time.Duration
-	CacheReadTimeout     *time.Duration
-	CacheWriteTimeout    *time.Duration
-	CacheDialTimeout     *time.Duration
-	CacheAcquireTimeout  *time.Duration
-	CacheLocalConfig     *CacheLocalConfig
+	Host            string
+	Port            int
+	SSLMode         bool
+	Password        string
+	MinConns        *int
+	MaxConns        *int
+	MaxConnIdleTime *time.Duration
+	MaxConnLifeTime *time.Duration
+	ReadTimeout     *time.Duration
+	WriteTimeout    *time.Duration
+	DialTimeout     *time.Duration
 }
 
 type Cache struct {
 	config   CacheConfig
-	observer Observer
+	observer *Observer
 	pool     *redis.Client
 	cache    *cache.Cache
 }
 
-func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry *CacheRetryConfig) (*Cache, error) {
-	if config.CacheMinConns == nil {
-		config.CacheMinConns = ptr(_CACHE_DEFAULT_MIN_CONNS)
-	}
+func NewCache(ctx context.Context, observer *Observer, config CacheConfig, retry ...RetryConfig) (*Cache, error) {
+	util.Merge(&config, _CACHE_DEFAULT_CONFIG)
+	_retry := util.Optional(retry, _CACHE_DEFAULT_RETRY_CONFIG)
 
-	if config.CacheMaxConns == nil {
-		config.CacheMaxConns = ptr(_CACHE_DEFAULT_MAX_CONNS)
-	}
+	redis.SetLogger(_newRedisLogger(observer))
 
-	if config.CacheMaxConnIdleTime == nil {
-		config.CacheMaxConnIdleTime = ptr(_CACHE_DEFAULT_MAX_CONN_IDLE_TIME)
-	}
-
-	if config.CacheMaxConnLifeTime == nil {
-		config.CacheMaxConnLifeTime = ptr(_CACHE_DEFAULT_MAX_CONN_LIFE_TIME)
-	}
-
-	if config.CacheReadTimeout == nil {
-		config.CacheReadTimeout = ptr(_CACHE_DEFAULT_READ_TIMEOUT)
-	}
-
-	if config.CacheWriteTimeout == nil {
-		config.CacheWriteTimeout = ptr(_CACHE_DEFAULT_WRITE_TIMEOUT)
-	}
-
-	if config.CacheDialTimeout == nil {
-		config.CacheDialTimeout = ptr(_CACHE_DEFAULT_DIAL_TIMEOUT)
-	}
-
-	if config.CacheAcquireTimeout == nil {
-		config.CacheAcquireTimeout = ptr(_CACHE_DEFAULT_ACQUIRE_TIMEOUT)
-	}
-
-	if retry == nil {
-		retry = &CacheRetryConfig{
-			Attempts:     _CACHE_DEFAULT_RETRY_ATTEMPTS,
-			InitialDelay: _CACHE_DEFAULT_RETRY_INITIAL_DELAY,
-			LimitDelay:   _CACHE_DEFAULT_RETRY_LIMIT_DELAY,
-		}
-	}
-
-	redis.SetLogger(_newRedisLogger(&observer))
-
-	dsn := fmt.Sprintf(_CACHE_REDIS_DSN, config.CacheHost, config.CachePort)
+	dsn := fmt.Sprintf(_CACHE_REDIS_DSN, config.Host, config.Port)
 
 	var ssl *tls.Config
-	if config.CacheSSLMode {
+	if config.SSLMode {
 		ssl = &tls.Config{
 			MinVersion: tls.VersionTLS12,
 		}
@@ -118,56 +84,50 @@ func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry 
 	poolConfig := &redis.Options{
 		Addr:         dsn,
 		TLSConfig:    ssl,
-		Password:     config.CachePassword,
-		MinIdleConns: *config.CacheMinConns,
-		PoolSize:     *config.CacheMaxConns,
-		IdleTimeout:  *config.CacheMaxConnIdleTime,
-		MaxConnAge:   *config.CacheMaxConnLifeTime,
-		ReadTimeout:  *config.CacheReadTimeout,
-		WriteTimeout: *config.CacheWriteTimeout,
-		DialTimeout:  *config.CacheDialTimeout,
-		PoolTimeout:  *config.CacheAcquireTimeout,
-	}
-
-	var localCache cache.LocalCache
-	if config.CacheLocalConfig != nil {
-		localCache = cache.NewTinyLFU(config.CacheLocalConfig.Size, config.CacheLocalConfig.TTL)
+		Password:     config.Password,
+		MinIdleConns: *config.MinConns,
+		PoolSize:     *config.MaxConns,
+		IdleTimeout:  *config.MaxConnIdleTime,
+		MaxConnAge:   *config.MaxConnLifeTime,
+		ReadTimeout:  *config.ReadTimeout,
+		WriteTimeout: *config.WriteTimeout,
+		DialTimeout:  *config.DialTimeout,
+		PoolTimeout:  *config.DialTimeout,
 	}
 
 	var pool *redis.Client
 
-	// TODO: only retry on specific errors
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
-		return Utils.ExponentialRetry(
-			retry.Attempts, retry.InitialDelay, retry.LimitDelay,
-			nil, func(attempt int) error {
-				var err error // nolint
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
+		return util.ExponentialRetry(
+			_retry.Attempts, _retry.InitialDelay, _retry.LimitDelay,
+			_retry.Retriables, func(attempt int) error {
+				var err error
 
-				observer.Infof(ctx, "Trying to connect to the cache %d/%d", attempt, retry.Attempts)
+				observer.Infof(ctx, "Trying to connect to the cache %d/%d", attempt, _retry.Attempts)
 
 				pool = redis.NewClient(poolConfig)
 
 				err = pool.Ping(ctx).Err()
 				if err != nil {
-					return ErrCacheGeneric().WrapAs(err)
+					return ErrCacheGeneric.Raise().Cause(err)
 				}
 
 				return nil
 			})
 	})
-	switch {
-	case err == nil:
-	case ErrDeadlineExceeded().Is(err):
-		return nil, ErrCacheTimedOut()
-	default:
-		return nil, ErrCacheGeneric().Wrap(err)
+	if err != nil {
+		if util.ErrDeadlineExceeded.Is(err) {
+			return nil, ErrCacheTimedOut.Raise().Cause(err)
+		}
+
+		return nil, err
 	}
 
 	observer.Info(ctx, "Connected to the cache")
 
 	cache := cache.New(&cache.Options{
 		Redis:        pool,
-		LocalCache:   localCache,
+		LocalCache:   nil,
 		StatsEnabled: false,
 	})
 
@@ -180,51 +140,52 @@ func NewCache(ctx context.Context, observer Observer, config CacheConfig, retry 
 }
 
 func (self *Cache) Health(ctx context.Context) error {
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		currentConns := self.pool.PoolStats().TotalConns
-		if currentConns < uint32(*self.config.CacheMinConns) {
-			return ErrCacheUnhealthy().Withf("current conns %d below minimum %d",
-				currentConns, *self.config.CacheMinConns)
+		if currentConns < uint32(*self.config.MinConns) {
+			return ErrCacheUnhealthy.Raise().With("current conns %d below minimum %d",
+				currentConns, *self.config.MinConns)
 		}
 
 		result, err := self.pool.Ping(ctx).Result()
 		if err != nil || result != "PONG" {
-			return ErrCacheUnhealthy().WrapAs(err)
+			return ErrCacheUnhealthy.Raise().Cause(err)
 		}
 
 		err = ctx.Err()
 		if err != nil {
-			return ErrCacheUnhealthy().WrapAs(err)
+			return ErrCacheUnhealthy.Raise().Cause(err)
 		}
 
 		return nil
 	})
-	switch {
-	case err == nil:
-		return nil
-	case ErrDeadlineExceeded().Is(err):
-		return ErrCacheTimedOut()
-	default:
-		return ErrCacheGeneric().Wrap(err)
+	if err != nil {
+		if util.ErrDeadlineExceeded.Is(err) {
+			return ErrCacheTimedOut.Raise().Cause(err)
+		}
+
+		return err
 	}
+
+	return nil
 }
 
-func _chErrToError(err error) *Error {
+func _chErrToError(err error) *errors.Error {
 	if err == nil {
 		return nil
 	}
 
 	switch err {
 	case cache.ErrCacheMiss:
-		return ErrCacheMiss().WrapWithDepth(1, err)
+		return ErrCacheMiss.Raise().Skip(1).Cause(err)
 	default:
-		return ErrCacheGeneric().WrapWithDepth(1, err)
+		return ErrCacheGeneric.Raise().Skip(1).Cause(err)
 	}
 }
 
 func (self *Cache) Set(ctx context.Context, key string, value any, ttl *time.Duration) error {
 	if ttl == nil {
-		ttl = ptr(0 * time.Second)
+		ttl = util.Pointer(0 * time.Second)
 	}
 
 	err := self.cache.Set(&cache.Item{
@@ -260,26 +221,27 @@ func (self *Cache) Delete(ctx context.Context, key string) error {
 }
 
 func (self *Cache) Close(ctx context.Context) error {
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		self.observer.Info(ctx, "Closing cache")
 
 		err := self.pool.Close()
 		if err != nil {
-			return ErrCacheGeneric().WrapAs(err)
+			return ErrCacheGeneric.Raise().Cause(err)
 		}
 
 		self.observer.Info(ctx, "Closed cache")
 
 		return nil
 	})
-	switch {
-	case err == nil:
-		return nil
-	case ErrDeadlineExceeded().Is(err):
-		return ErrCacheTimedOut()
-	default:
-		return ErrCacheGeneric().Wrap(err)
+	if err != nil {
+		if util.ErrDeadlineExceeded.Is(err) {
+			return ErrCacheTimedOut.Raise().Cause(err)
+		}
+
+		return err
 	}
+
+	return nil
 }
 
 type _redisLogger struct {
@@ -292,6 +254,6 @@ func _newRedisLogger(observer *Observer) *_redisLogger {
 	}
 }
 
-func (self _redisLogger) Printf(ctx context.Context, format string, v ...any) { // nolint
+func (self _redisLogger) Printf(ctx context.Context, format string, v ...any) {
 	self.observer.Infof(ctx, format, v...)
 }

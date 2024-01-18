@@ -27,19 +27,19 @@ class Tools(superinvoke.Tools):
 
     Test = superinvoke.Tool(
         name="gotestsum",
-        version="1.10.1",
+        version="1.11.0",
         tags=[Tags.DEV, Tags.CI_INT],
         links={
             superinvoke.Platforms.LINUX: (
-                "https://github.com/gotestyourself/gotestsum/releases/download/v1.10.1/gotestsum_1.10.1_linux_amd64.tar.gz",
+                "https://github.com/gotestyourself/gotestsum/releases/download/v1.11.0/gotestsum_1.11.0_linux_amd64.tar.gz",
                 "gotestsum",
             ),
             superinvoke.Platforms.MACOS: (
-                "https://github.com/gotestyourself/gotestsum/releases/download/v1.10.1/gotestsum_1.10.1_darwin_arm64.tar.gz",
+                "https://github.com/gotestyourself/gotestsum/releases/download/v1.11.0/gotestsum_1.11.0_darwin_arm64.tar.gz",
                 "gotestsum",
             ),
             superinvoke.Platforms.WINDOWS: (
-                "https://github.com/gotestyourself/gotestsum/releases/download/v1.10.1/gotestsum_1.10.1_windows_amd64.tar.gz",
+                "https://github.com/gotestyourself/gotestsum/releases/download/v1.11.0/gotestsum_1.11.0_windows_amd64.tar.gz",
                 "gotestsum.exe",
             ),
         },
@@ -47,20 +47,20 @@ class Tools(superinvoke.Tools):
 
     Lint = superinvoke.Tool(
         name="golangci-lint",
-        version="1.54.2",
+        version="1.55.2",
         tags=[Tags.DEV, Tags.CI_INT],
         links={
             superinvoke.Platforms.LINUX: (
-                "https://github.com/golangci/golangci-lint/releases/download/v1.54.2/golangci-lint-1.54.2-linux-amd64.tar.gz",
-                "golangci-lint-1.54.2-linux-amd64/golangci-lint",
+                "https://github.com/golangci/golangci-lint/releases/download/v1.55.2/golangci-lint-1.55.2-linux-amd64.tar.gz",
+                "golangci-lint-1.55.2-linux-amd64/golangci-lint",
             ),
             superinvoke.Platforms.MACOS: (
-                "https://github.com/golangci/golangci-lint/releases/download/v1.54.2/golangci-lint-1.54.2-darwin-arm64.tar.gz",
-                "golangci-lint-1.54.2-darwin-arm64/golangci-lint",
+                "https://github.com/golangci/golangci-lint/releases/download/v1.55.2/golangci-lint-1.55.2-darwin-arm64.tar.gz",
+                "golangci-lint-1.55.2-darwin-arm64/golangci-lint",
             ),
             superinvoke.Platforms.WINDOWS: (
-                "https://github.com/golangci/golangci-lint/releases/download/v1.54.2/golangci-lint-1.54.2-windows-amd64.zip",
-                "golangci-lint-1.54.2-windows-amd64/golangci-lint.exe",
+                "https://github.com/golangci/golangci-lint/releases/download/v1.55.2/golangci-lint-1.55.2-windows-amd64.zip",
+                "golangci-lint-1.55.2-windows-amd64/golangci-lint.exe",
             ),
         },
     )

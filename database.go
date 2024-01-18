@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"runtime"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgconn"
@@ -12,7 +13,10 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/leporo/sqlf"
+	"github.com/neoxelox/errors"
 	"github.com/randallmlough/pgxscan"
+
+	"github.com/neoxelox/kit/util"
 )
 
 const (
@@ -20,16 +24,18 @@ const (
 )
 
 var (
-	_DATABASE_DEFAULT_MIN_CONNS          = 1
-	_DATABASE_DEFAULT_MAX_CONNS          = 1 * runtime.GOMAXPROCS(-1)
-	_DATABASE_DEFAULT_MAX_CONN_IDLE_TIME = 30 * time.Minute
-	_DATABASE_DEFAULT_MAX_CONN_LIFE_TIME = 1 * time.Hour
-	// _DATABASE_DEFAULT_DIAL_TIMEOUT  = 30 * time.Second // TODO: check where this goes
-	// _DATABASE_DEFAULT_ACQUIRE_TIMEOUT  = 30 * time.Second // TODO: check where this goes
-	_DATABASE_DEFAULT_RETRY_ATTEMPTS      = 1
-	_DATABASE_DEFAULT_RETRY_INITIAL_DELAY = 0 * time.Second
-	_DATABASE_DEFAULT_RETRY_LIMIT_DELAY   = 0 * time.Second
-	_DATABASE_ERR_PGCODE                  = regexp.MustCompile(`\(SQLSTATE (.*)\)`)
+	_DATABASE_ERR_PGCODE = regexp.MustCompile(`\(SQLSTATE (.*)\)`)
+
+	KeyDatabaseTransaction Key = KeyBase + "database:transaction"
+)
+
+var (
+	ErrDatabaseGeneric            = errors.New("database failed")
+	ErrDatabaseTimedOut           = errors.New("database timed out")
+	ErrDatabaseUnhealthy          = errors.New("database unhealthy")
+	ErrDatabaseTransactionFailed  = errors.New("database transaction failed")
+	ErrDatabaseNoRows             = errors.New("database no rows in result set")
+	ErrDatabaseIntegrityViolation = errors.New("database integrity constraint violation")
 )
 
 var _KlevelToPlevel = map[Level]pgx.LogLevel{
@@ -41,81 +47,97 @@ var _KlevelToPlevel = map[Level]pgx.LogLevel{
 	LvlNone:  pgx.LogLevelNone,
 }
 
-type DatabaseRetryConfig struct {
-	Attempts     int
-	InitialDelay time.Duration
-	LimitDelay   time.Duration
+var (
+	_DATABASE_DEFAULT_CONFIG = DatabaseConfig{
+		MinConns:              util.Pointer(1),
+		MaxConns:              util.Pointer(max(4, 2*runtime.GOMAXPROCS(-1))),
+		MaxConnIdleTime:       util.Pointer(30 * time.Minute),
+		MaxConnLifeTime:       util.Pointer(1 * time.Hour),
+		DialTimeout:           util.Pointer(30 * time.Second),
+		StatementTimeout:      util.Pointer(30 * time.Second),
+		DefaultIsolationLevel: util.Pointer(IsoLvlReadCommitted),
+	}
+
+	_DATABASE_DEFAULT_RETRY_CONFIG = RetryConfig{
+		Attempts:     1,
+		InitialDelay: 0 * time.Second,
+		LimitDelay:   0 * time.Second,
+		Retriables:   []error{},
+	}
+)
+
+type IsolationLevel int
+
+var (
+	IsoLvlReadUncommitted IsolationLevel = 0
+	IsoLvlReadCommitted   IsolationLevel
+	IsoLvlRepeatableRead  IsolationLevel
+	IsoLvlSerializable    IsolationLevel
+)
+
+var _KisoLevelToPisoLevel = map[IsolationLevel]pgx.TxIsoLevel{
+	IsoLvlReadUncommitted: pgx.ReadUncommitted,
+	IsoLvlReadCommitted:   pgx.ReadCommitted,
+	IsoLvlRepeatableRead:  pgx.RepeatableRead,
+	IsoLvlSerializable:    pgx.Serializable,
 }
 
 type DatabaseConfig struct {
-	DatabaseHost            string
-	DatabasePort            int
-	DatabaseSSLMode         string
-	DatabaseUser            string
-	DatabasePassword        string
-	DatabaseName            string
-	AppName                 string
-	DatabaseMinConns        *int
-	DatabaseMaxConns        *int
-	DatabaseMaxConnIdleTime *time.Duration
-	DatabaseMaxConnLifeTime *time.Duration
+	Host                  string
+	Port                  int
+	SSLMode               string
+	User                  string
+	Password              string
+	Database              string
+	Service               string
+	MinConns              *int
+	MaxConns              *int
+	MaxConnIdleTime       *time.Duration
+	MaxConnLifeTime       *time.Duration
+	DialTimeout           *time.Duration
+	StatementTimeout      *time.Duration
+	DefaultIsolationLevel *IsolationLevel
 }
 
 type Database struct {
 	config   DatabaseConfig
-	observer Observer
+	observer *Observer
 	pool     *pgxpool.Pool
 }
 
-func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig,
-	retry *DatabaseRetryConfig) (*Database, error) {
-	if config.DatabaseMinConns == nil {
-		config.DatabaseMinConns = ptr(_DATABASE_DEFAULT_MIN_CONNS)
-	}
-
-	if config.DatabaseMaxConns == nil {
-		config.DatabaseMaxConns = ptr(_DATABASE_DEFAULT_MAX_CONNS)
-	}
-
-	if config.DatabaseMaxConnIdleTime == nil {
-		config.DatabaseMaxConnIdleTime = ptr(_DATABASE_DEFAULT_MAX_CONN_IDLE_TIME)
-	}
-
-	if config.DatabaseMaxConnLifeTime == nil {
-		config.DatabaseMaxConnLifeTime = ptr(_DATABASE_DEFAULT_MAX_CONN_LIFE_TIME)
-	}
-
-	if retry == nil {
-		retry = &DatabaseRetryConfig{
-			Attempts:     _DATABASE_DEFAULT_RETRY_ATTEMPTS,
-			InitialDelay: _DATABASE_DEFAULT_RETRY_INITIAL_DELAY,
-			LimitDelay:   _DATABASE_DEFAULT_RETRY_LIMIT_DELAY,
-		}
-	}
+func NewDatabase(ctx context.Context, observer *Observer, config DatabaseConfig,
+	retry ...RetryConfig) (*Database, error) {
+	util.Merge(&config, _DATABASE_DEFAULT_CONFIG)
+	_retry := util.Optional(retry, _DATABASE_DEFAULT_RETRY_CONFIG)
 
 	dsn := fmt.Sprintf(
 		_DATABASE_POSTGRES_DSN,
-		config.DatabaseUser,
-		config.DatabasePassword,
-		config.DatabaseHost,
-		config.DatabasePort,
-		config.DatabaseName,
-		config.DatabaseSSLMode,
+		config.User,
+		config.Password,
+		config.Host,
+		config.Port,
+		config.Database,
+		config.SSLMode,
 	)
 
 	poolConfig, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
-		return nil, ErrDatabaseGeneric().Wrap(err)
+		return nil, ErrDatabaseGeneric.Raise().Cause(err)
 	}
 
-	poolConfig.MinConns = int32(*config.DatabaseMinConns)
-	poolConfig.MaxConns = int32(*config.DatabaseMaxConns)
-	poolConfig.MaxConnIdleTime = *config.DatabaseMaxConnIdleTime
-	poolConfig.MaxConnLifetime = *config.DatabaseMaxConnLifeTime
+	poolConfig.MinConns = int32(*config.MinConns)
+	poolConfig.MaxConns = int32(*config.MaxConns)
+	poolConfig.MaxConnIdleTime = *config.MaxConnIdleTime
+	poolConfig.MaxConnLifetime = *config.MaxConnLifeTime
+	poolConfig.ConnConfig.ConnectTimeout = *config.DialTimeout
 	poolConfig.ConnConfig.RuntimeParams["standard_conforming_strings"] = "on"
-	poolConfig.ConnConfig.RuntimeParams["application_name"] = config.AppName
+	poolConfig.ConnConfig.RuntimeParams["application_name"] = config.Service
+	poolConfig.ConnConfig.RuntimeParams["default_transaction_isolation"] = string(
+		_KisoLevelToPisoLevel[*config.DefaultIsolationLevel])
+	poolConfig.ConnConfig.RuntimeParams["statement_timeout"] = strconv.Itoa(int(config.StatementTimeout.Milliseconds()))
+	poolConfig.ConnConfig.RuntimeParams["lock_timeout"] = strconv.Itoa(int(config.StatementTimeout.Milliseconds()))
 
-	pgxLogger := _newPgxLogger(&observer)
+	pgxLogger := _newPgxLogger(observer)
 	pgxLogLevel := _KlevelToPlevel[pgxLogger.observer.Level()]
 
 	// PGX Info level is too much! (PGX levels are reversed)
@@ -128,38 +150,37 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig,
 
 	var pool *pgxpool.Pool
 
-	// TODO: only retry on specific errors
-	err = Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
-		return Utils.ExponentialRetry(
-			retry.Attempts, retry.InitialDelay, retry.LimitDelay,
-			nil, func(attempt int) error {
-				var err error // nolint
+	err = util.Deadline(ctx, func(exceeded <-chan struct{}) error {
+		return util.ExponentialRetry(
+			_retry.Attempts, _retry.InitialDelay, _retry.LimitDelay,
+			_retry.Retriables, func(attempt int) error {
+				var err error // nolint:govet
 
 				observer.Infof(ctx, "Trying to connect to the %s database %d/%d",
-					config.DatabaseName, attempt, retry.Attempts)
+					config.Database, attempt, _retry.Attempts)
 
 				pool, err = pgxpool.ConnectConfig(ctx, poolConfig)
 				if err != nil {
-					return ErrDatabaseGeneric().WrapAs(err)
+					return ErrDatabaseGeneric.Raise().Cause(err)
 				}
 
 				err = pool.Ping(ctx)
 				if err != nil {
-					return ErrDatabaseGeneric().WrapAs(err)
+					return ErrDatabaseGeneric.Raise().Cause(err)
 				}
 
 				return nil
 			})
 	})
-	switch {
-	case err == nil:
-	case ErrDeadlineExceeded().Is(err):
-		return nil, ErrDatabaseTimedOut()
-	default:
-		return nil, ErrDatabaseGeneric().Wrap(err)
+	if err != nil {
+		if util.ErrDeadlineExceeded.Is(err) {
+			return nil, ErrDatabaseTimedOut.Raise().Cause(err)
+		}
+
+		return nil, err
 	}
 
-	observer.Infof(ctx, "Connected to the %s database", config.DatabaseName)
+	observer.Infof(ctx, "Connected to the %s database", config.Database)
 
 	sqlf.SetDialect(sqlf.PostgreSQL)
 
@@ -171,36 +192,37 @@ func NewDatabase(ctx context.Context, observer Observer, config DatabaseConfig,
 }
 
 func (self *Database) Health(ctx context.Context) error {
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		currentConns := self.pool.Stat().TotalConns()
-		if currentConns < int32(*self.config.DatabaseMinConns) {
-			return ErrDatabaseUnhealthy().Withf("current conns %d below minimum %d",
-				currentConns, *self.config.DatabaseMinConns)
+		if currentConns < int32(*self.config.MinConns) {
+			return ErrDatabaseUnhealthy.Raise().With("current conns %d below minimum %d",
+				currentConns, *self.config.MinConns)
 		}
 
 		err := self.pool.Ping(ctx)
 		if err != nil {
-			return ErrDatabaseUnhealthy().WrapAs(err)
+			return ErrDatabaseUnhealthy.Raise().Cause(err)
 		}
 
 		err = ctx.Err()
 		if err != nil {
-			return ErrDatabaseUnhealthy().WrapAs(err)
+			return ErrDatabaseUnhealthy.Raise().Cause(err)
 		}
 
 		return nil
 	})
-	switch {
-	case err == nil:
-		return nil
-	case ErrDeadlineExceeded().Is(err):
-		return ErrDatabaseTimedOut()
-	default:
-		return ErrDatabaseGeneric().Wrap(err)
+	if err != nil {
+		if util.ErrDeadlineExceeded.Is(err) {
+			return ErrDatabaseTimedOut.Raise().Cause(err)
+		}
+
+		return err
 	}
+
+	return nil
 }
 
-func _dbErrToError(err error) *Error {
+func _dbErrToError(err error) *errors.Error {
 	if err == nil {
 		return nil
 	}
@@ -210,15 +232,15 @@ func _dbErrToError(err error) *Error {
 		case pgerrcode.IntegrityConstraintViolation, pgerrcode.RestrictViolation, pgerrcode.NotNullViolation,
 			pgerrcode.ForeignKeyViolation, pgerrcode.UniqueViolation, pgerrcode.CheckViolation,
 			pgerrcode.ExclusionViolation:
-			return ErrDatabaseIntegrityViolation().WrapWithDepth(1, err)
+			return ErrDatabaseIntegrityViolation.Raise().Skip(1).Cause(err)
 		}
 	}
 
-	switch err.Error() {
-	case pgx.ErrNoRows.Error():
-		return ErrDatabaseNoRows().WrapWithDepth(1, err)
+	switch err {
+	case pgx.ErrNoRows:
+		return ErrDatabaseNoRows.Raise().Skip(1).Cause(err)
 	default:
-		return ErrDatabaseGeneric().WrapWithDepth(1, err)
+		return ErrDatabaseGeneric.Raise().Skip(1).Cause(err)
 	}
 }
 
@@ -288,82 +310,98 @@ func (self *Database) Exec(ctx context.Context, stmt *sqlf.Stmt) (int, error) {
 	return int(command.RowsAffected()), nil
 }
 
-func (self *Database) Transaction(ctx context.Context, fn func(ctx context.Context) error) error {
+func (self *Database) Transaction(
+	ctx context.Context, level *IsolationLevel, fn func(ctx context.Context) error) error {
+	if level == nil {
+		level = self.config.DefaultIsolationLevel
+	}
+
 	if ctx.Value(KeyDatabaseTransaction) != nil {
 		err := fn(ctx)
 		if err != nil {
-			return ErrDatabaseTransactionFailed().WrapAs(err)
+			// Wait to rollback context transaction at the original Transaction call
+			return ErrDatabaseTransactionFailed.Raise().Cause(err)
 		}
 
 		return nil
 	}
 
 	transaction, err := self.pool.BeginTx(ctx, pgx.TxOptions{
-		IsoLevel:   pgx.Serializable,
+		IsoLevel:   _KisoLevelToPisoLevel[*level],
 		AccessMode: pgx.ReadWrite,
 	})
 	if err != nil {
-		return ErrDatabaseTransactionFailed().Wrap(err)
+		// Don't rollback transaction because it was not created
+		return ErrDatabaseTransactionFailed.Raise().Cause(err)
 	}
 
 	err = ctx.Err()
 	if err != nil {
-		return ErrDatabaseTransactionFailed().Wrap(err)
+		errT := transaction.Rollback(ctx)
+		return ErrDatabaseTransactionFailed.Raise().Extra(map[string]any{"transaction_error": errT}).Cause(err)
 	}
 
 	defer func() {
-		err := recover()
-		if err != nil {
-			errR := transaction.Rollback(ctx)
-			panic(Utils.CombineErrors(err.(error), errR)) // nolint
+		rec := recover()
+		if rec != nil {
+			errT := transaction.Rollback(ctx)
+
+			err, ok := rec.(error) // nolint:govet
+			if !ok {
+				err = ErrDatabaseGeneric.Raise().With("%v", rec)
+			}
+
+			// Repanic so upwards middlewares are aware of it
+			panic(ErrDatabaseTransactionFailed.Raise().Extra(map[string]any{"transaction_error": errT}).Cause(err))
 		}
 	}()
 
 	err = fn(context.WithValue(ctx, KeyDatabaseTransaction, transaction))
 	if err != nil {
-		errR := transaction.Rollback(ctx)
-		return ErrDatabaseTransactionFailed().Wrap(Utils.CombineErrors(err, errR))
+		errT := transaction.Rollback(ctx)
+		return ErrDatabaseTransactionFailed.Raise().Extra(map[string]any{"transaction_error": errT}).Cause(err)
 	}
 
 	err = ctx.Err()
 	if err != nil {
-		errR := transaction.Rollback(ctx)
-		return ErrDatabaseTransactionFailed().Wrap(Utils.CombineErrors(err, errR))
+		errT := transaction.Rollback(ctx)
+		return ErrDatabaseTransactionFailed.Raise().Extra(map[string]any{"transaction_error": errT}).Cause(err)
 	}
 
 	err = transaction.Commit(ctx)
 	if err != nil {
-		errR := transaction.Rollback(ctx)
-		return ErrDatabaseTransactionFailed().Wrap(Utils.CombineErrors(err, errR))
+		errT := transaction.Rollback(ctx)
+		return ErrDatabaseTransactionFailed.Raise().Extra(map[string]any{"transaction_error": errT}).Cause(err)
 	}
 
 	err = ctx.Err()
 	if err != nil {
-		errR := transaction.Rollback(ctx)
-		return ErrDatabaseTransactionFailed().Wrap(Utils.CombineErrors(err, errR))
+		errT := transaction.Rollback(ctx)
+		return ErrDatabaseTransactionFailed.Raise().Extra(map[string]any{"transaction_error": errT}).Cause(err)
 	}
 
 	return nil
 }
 
 func (self *Database) Close(ctx context.Context) error {
-	err := Utils.Deadline(ctx, func(exceeded <-chan struct{}) error {
-		self.observer.Infof(ctx, "Closing %s database", self.config.DatabaseName)
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
+		self.observer.Infof(ctx, "Closing %s database", self.config.Database)
 
 		self.pool.Close()
 
-		self.observer.Infof(ctx, "Closed %s database", self.config.DatabaseName)
+		self.observer.Infof(ctx, "Closed %s database", self.config.Database)
 
 		return nil
 	})
-	switch {
-	case err == nil:
-		return nil
-	case ErrDeadlineExceeded().Is(err):
-		return ErrDatabaseTimedOut()
-	default:
-		return ErrDatabaseGeneric().Wrap(err)
+	if err != nil {
+		if util.ErrDeadlineExceeded.Is(err) {
+			return ErrDatabaseTimedOut.Raise().Cause(err)
+		}
+
+		return err
 	}
+
+	return nil
 }
 
 var _PlevelToKlevel = map[pgx.LogLevel]Level{
@@ -385,6 +423,6 @@ func _newPgxLogger(observer *Observer) *_pgxLogger {
 	}
 }
 
-func (self _pgxLogger) Log(ctx context.Context, level pgx.LogLevel, msg string, data map[string]any) { // nolint
+func (self _pgxLogger) Log(ctx context.Context, level pgx.LogLevel, msg string, data map[string]any) {
 	self.observer.WithLevelf(ctx, _PlevelToKlevel[level], "%s: %+v", msg, data)
 }

@@ -2,20 +2,25 @@ package middleware
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/hibiken/asynq"
 	"github.com/labstack/echo/v4"
+	"github.com/mkideal/cli"
 
 	"github.com/neoxelox/kit"
+	"github.com/neoxelox/kit/util"
 )
-
-// TODO: dump request/response body, params and headers for easy debug tracing in logs
 
 const (
 	_OBSERVER_MIDDLEWARE_RESPONSE_TRACE_ID_HEADER = "X-Trace-Id"
+)
+
+var (
+	_OBSERVER_MIDDLEWARE_DEFAULT_CONFIG = ObserverConfig{}
 )
 
 type ObserverConfig struct {
@@ -23,10 +28,12 @@ type ObserverConfig struct {
 
 type Observer struct {
 	config   ObserverConfig
-	observer kit.Observer
+	observer *kit.Observer
 }
 
-func NewObserver(observer kit.Observer, config ObserverConfig) *Observer {
+func NewObserver(observer *kit.Observer, config ObserverConfig) *Observer {
+	util.Merge(&config, _OBSERVER_MIDDLEWARE_DEFAULT_CONFIG)
+
 	return &Observer{
 		config:   config,
 		observer: observer,
@@ -37,26 +44,30 @@ func (self *Observer) HandleRequest(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
 		start := time.Now()
 
-		traceCtx, endTraceRequest := self.observer.TraceRequest(ctx.Request().Context(), ctx.Request())
+		traceCtx, endTraceRequest := self.observer.TraceServerRequest(ctx.Request().Context(), ctx.Request())
 		defer endTraceRequest()
-		traceID := self.observer.GetTrace(traceCtx).String()
+
+		ctx.SetRequest(ctx.Request().WithContext(traceCtx))
+		traceID := self.observer.GetTrace(traceCtx)
+		sentrySpan := sentry.SpanFromContext(traceCtx)
 
 		ctx.Response().Header().Set(_OBSERVER_MIDDLEWARE_RESPONSE_TRACE_ID_HEADER, traceID)
-		ctx.SetRequest(ctx.Request().WithContext(traceCtx))
+		if sentrySpan != nil {
+			ctx.Response().Header().Set(sentry.SentryTraceHeader, sentrySpan.ToSentryTrace())
+		}
 
 		err := next(ctx)
 
 		request := ctx.Request()
 		response := ctx.Response()
 
-		// TODO: find another cleaner way to do this
-		// Patch in order to be able to have better path info in sentry
-		// now that the router has been executed
-		sentryHub := sentry.GetHubFromContext(request.Context())
-		if sentryHub != nil {
-			sentryHub.Scope().SetTransaction(ctx.Path())
+		// Overwrite the Sentry transaction name now that the router
+		// has been executed to have better path aggregation
+		sentryTx := sentry.TransactionFromContext(request.Context())
+		if sentryTx != nil {
+			sentryTx.Name = fmt.Sprintf("%s %s", request.Method, ctx.Path())
+			sentryTx.Source = sentry.SourceRoute
 		}
-		// -----
 
 		stop := time.Now()
 
@@ -80,18 +91,19 @@ func (self *Observer) HandleTask(next asynq.Handler) asynq.Handler {
 
 		ctx, endTraceTask := self.observer.TraceTask(ctx, task)
 		defer endTraceTask()
-		traceID := self.observer.GetTrace(ctx).String()
+
+		traceID := self.observer.GetTrace(ctx)
 
 		err := next.ProcessTask(ctx, task)
 
-		// TODO: find another way to get task queue without using reflect
-		// TODO: find a way to get the real task execution state
+		// TODO: find a way to get task queue without using reflect
 		qname := reflect.ValueOf(task.ResultWriter()).Elem().FieldByName("qname")
 		queue := "unknown"
 		if qname.String() != "" {
 			queue = qname.String()
 		}
 
+		// TODO: find a way to get the real task execution state
 		status := "succeeded"
 		if err != nil {
 			status = "failed"
@@ -101,12 +113,41 @@ func (self *Observer) HandleTask(next asynq.Handler) asynq.Handler {
 
 		self.observer.Logger.Logger().Info().
 			Str("queue", queue).
-			Str("type", task.Type()).
+			Str("task", task.Type()).
 			Str("status", status).
 			Dur("latency", stop.Sub(start)).
 			Str("trace_id", traceID).
 			Msg("")
 
-		return err // nolint: wrapcheck
+		return err
 	})
+}
+
+func (self *Observer) HandleCommand(next kit.RunnerHandler) kit.RunnerHandler {
+	return func(ctx context.Context, command *cli.Context) error {
+		start := time.Now()
+
+		ctx, endTraceCommand := self.observer.TraceCommand(ctx, command)
+		defer endTraceCommand()
+
+		traceID := self.observer.GetTrace(ctx)
+
+		err := next(ctx, command)
+
+		status := "succeeded"
+		if err != nil {
+			status = "failed"
+		}
+
+		stop := time.Now()
+
+		self.observer.Logger.Logger().Info().
+			Str("command", command.Path()).
+			Str("status", status).
+			Dur("latency", stop.Sub(start)).
+			Str("trace_id", traceID).
+			Msg("")
+
+		return err
+	}
 }
