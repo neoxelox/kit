@@ -18,7 +18,7 @@ require (
 	github.com/jackc/pgconn v1.14.1
 	github.com/jackc/pgerrcode v0.0.0-20220416144525-469b46aa5efa
 	github.com/jackc/pgx/v4 v4.18.1
-	github.com/labstack/echo/v4 v4.11.1
+	github.com/labstack/echo/v4 v4.11.4
 	github.com/leporo/sqlf v1.4.0
 	github.com/mkideal/cli v0.2.7
 	github.com/neoxelox/errors v0.2.0
@@ -27,7 +27,7 @@ require (
 	github.com/rs/xid v1.5.0
 	github.com/rs/zerolog v1.30.0
 	github.com/scylladb/go-set v1.0.2
-	golang.org/x/text v0.13.0
+	golang.org/x/text v0.14.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -47,10 +47,10 @@ require (
 	github.com/jackc/pgtype v1.14.0 // indirect
 	github.com/jackc/puddle v1.3.0 // indirect
 	github.com/klauspost/compress v1.16.7 // indirect
-	github.com/labstack/gommon v0.4.0 // indirect
+	github.com/labstack/gommon v0.4.2 // indirect
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
-	github.com/mattn/go-isatty v0.0.19 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mkideal/expr v0.1.0 // indirect
 	github.com/randallmlough/sqlmaper v0.0.0-20191117174101-7ad100a86097 // indirect
 	github.com/redis/go-redis/v9 v9.1.0 // indirect
@@ -63,12 +63,12 @@ require (
 	github.com/vmihailenco/msgpack/v5 v5.3.5 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
-	golang.org/x/crypto v0.13.0 // indirect
-	golang.org/x/net v0.15.0 // indirect
+	golang.org/x/crypto v0.17.0 // indirect
+	golang.org/x/net v0.19.0 // indirect
 	golang.org/x/sync v0.3.0 // indirect
-	golang.org/x/sys v0.12.0 // indirect
-	golang.org/x/term v0.12.0 // indirect
-	golang.org/x/time v0.3.0 // indirect
+	golang.org/x/sys v0.15.0 // indirect
+	golang.org/x/term v0.15.0 // indirect
+	golang.org/x/time v0.5.0 // indirect
 	google.golang.org/protobuf v1.31.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
