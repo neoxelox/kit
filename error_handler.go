@@ -48,11 +48,10 @@ func (self *ErrorHandler) HandleRequest(err error, ctx echo.Context) {
 		return
 	}
 
-	httpError := HTTPErrServerGeneric.Cause(err) // nolint:ineffassign,staticcheck,wastedassign
-
 	httpError, ok := err.(*HTTPError)
 	if !ok {
-		*httpError, ok = err.(HTTPError)
+		httpErrorV, ok := err.(HTTPError) // nolint:govet
+		httpError = &httpErrorV
 
 		if !ok {
 			switch err {
