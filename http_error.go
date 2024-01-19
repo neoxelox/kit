@@ -3,6 +3,8 @@ package kit
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"strings"
 
 	"github.com/neoxelox/errors"
 )
@@ -145,7 +147,8 @@ func (self HTTPError) Format(format fmt.State, verb rune) {
 					report += cause.StringReport(false)
 				}
 			default:
-				report += cause.Error()
+				report += "\x1b[0;31m" + cause.Error() + "\x1b[0m (" +
+					strings.TrimPrefix(reflect.TypeOf(cause).String(), "*") + ")\n"
 			}
 		}
 
