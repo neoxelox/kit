@@ -214,7 +214,19 @@ func (self *Logger) SetVerbose(v bool) {
 }
 
 func (self Logger) Print(i ...any) {
-	self.logger.Log().Msg(fmt.Sprint(i...))
+	msg := ""
+	for j, v := range i {
+		if j > 0 {
+			msg += " "
+		}
+
+		if s, ok := v.(fmt.Stringer); ok {
+			msg += s.String()
+		} else {
+			msg += fmt.Sprintf("%v", v)
+		}
+	}
+	self.logger.Log().Msg(msg)
 }
 
 func (self Logger) Printf(format string, i ...any) {
@@ -222,7 +234,19 @@ func (self Logger) Printf(format string, i ...any) {
 }
 
 func (self Logger) Debug(i ...any) {
-	self.logger.Debug().Msg(fmt.Sprint(i...))
+	msg := ""
+	for j, v := range i {
+		if j > 0 {
+			msg += " "
+		}
+
+		if s, ok := v.(fmt.Stringer); ok {
+			msg += s.String()
+		} else {
+			msg += fmt.Sprintf("%v", v)
+		}
+	}
+	self.logger.Debug().Msg(msg)
 }
 
 func (self Logger) Debugf(format string, i ...any) {
@@ -230,7 +254,19 @@ func (self Logger) Debugf(format string, i ...any) {
 }
 
 func (self Logger) Info(i ...any) {
-	self.logger.Info().Msg(fmt.Sprint(i...))
+	msg := ""
+	for j, v := range i {
+		if j > 0 {
+			msg += " "
+		}
+
+		if s, ok := v.(fmt.Stringer); ok {
+			msg += s.String()
+		} else {
+			msg += fmt.Sprintf("%v", v)
+		}
+	}
+	self.logger.Info().Msg(msg)
 }
 
 func (self Logger) Infof(format string, i ...any) {
@@ -238,7 +274,19 @@ func (self Logger) Infof(format string, i ...any) {
 }
 
 func (self Logger) Warn(i ...any) {
-	self.logger.Warn().Caller(self.skipFrameCount).Msg(fmt.Sprint(i...))
+	msg := ""
+	for j, v := range i {
+		if j > 0 {
+			msg += " "
+		}
+
+		if s, ok := v.(fmt.Stringer); ok {
+			msg += s.String()
+		} else {
+			msg += fmt.Sprintf("%v", v)
+		}
+	}
+	self.logger.Warn().Caller(self.skipFrameCount).Msg(msg)
 }
 
 func (self Logger) Warnf(format string, i ...any) {
@@ -275,7 +323,19 @@ func (self Logger) Error(i ...any) {
 	if LvlDebug >= self.level {
 		self.printDebugError(i...)
 	} else {
-		self.logger.Error().Caller(self.skipFrameCount).Msg(fmt.Sprint(i...))
+		msg := ""
+		for j, v := range i {
+			if j > 0 {
+				msg += " "
+			}
+
+			if s, ok := v.(fmt.Stringer); ok {
+				msg += s.String()
+			} else {
+				msg += fmt.Sprintf("%v", v)
+			}
+		}
+		self.logger.Error().Caller(self.skipFrameCount).Msg(msg)
 	}
 }
 
@@ -293,7 +353,19 @@ func (self Logger) Fatal(i ...any) {
 		// Allow fast exitting only on debug level
 		os.Exit(1) // nolint:revive
 	} else { // nolint:revive
-		self.logger.Fatal().Caller(self.skipFrameCount).Msg(fmt.Sprint(i...))
+		msg := ""
+		for j, v := range i {
+			if j > 0 {
+				msg += " "
+			}
+
+			if s, ok := v.(fmt.Stringer); ok {
+				msg += s.String()
+			} else {
+				msg += fmt.Sprintf("%v", v)
+			}
+		}
+		self.logger.Fatal().Caller(self.skipFrameCount).Msg(msg)
 	}
 }
 
@@ -313,7 +385,19 @@ func (self Logger) Panic(i ...any) {
 		// Allow panicking only on debug level
 		panic(fmt.Sprint(i...))
 	} else { // nolint:revive
-		self.logger.Panic().Caller(self.skipFrameCount).Msg(fmt.Sprint(i...))
+		msg := ""
+		for j, v := range i {
+			if j > 0 {
+				msg += " "
+			}
+
+			if s, ok := v.(fmt.Stringer); ok {
+				msg += s.String()
+			} else {
+				msg += fmt.Sprintf("%v", v)
+			}
+		}
+		self.logger.Panic().Caller(self.skipFrameCount).Msg(msg)
 	}
 }
 
