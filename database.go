@@ -36,6 +36,7 @@ var (
 	ErrDatabaseTransactionFailed  = errors.New("database transaction failed")
 	ErrDatabaseNoRows             = errors.New("database no rows in result set")
 	ErrDatabaseIntegrityViolation = errors.New("database integrity constraint violation")
+	ErrDatabaseUnexpectedEffect   = errors.New("database affected %d out of %d expected rows")
 )
 
 var _KlevelToPlevel = map[Level]pgx.LogLevel{
