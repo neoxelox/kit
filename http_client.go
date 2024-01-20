@@ -12,6 +12,10 @@ import (
 	"github.com/neoxelox/kit/util"
 )
 
+const (
+	_HTTP_CLIENT_RETRY_DEDUP_SKIP_COUNT = 6
+)
+
 var (
 	ErrHTTPClientGeneric   = errors.New("http client failed")
 	ErrHTTPClientTimedOut  = errors.New("http client timed out")
@@ -103,15 +107,22 @@ func (self *HTTPClient) _do(request *http.Request, retry *RetryConfig) (*http.Re
 			if err != nil {
 				if urlErr, ok := err.(*url.Error); ok && urlErr.Timeout() {
 					return ErrHTTPClientTimedOut.Raise().
-						Skip(2).Extra(map[string]any{"attempt": attempt, "timeout": self.config.Timeout}).Cause(err)
+						Skip(2 + _HTTP_CLIENT_RETRY_DEDUP_SKIP_COUNT).
+						Extra(map[string]any{"attempt": attempt, "timeout": self.config.Timeout}).
+						Cause(err)
 				}
 
-				return ErrHTTPClientGeneric.Raise().Skip(2).Extra(map[string]any{"attempt": attempt}).Cause(err)
+				return ErrHTTPClientGeneric.Raise().
+					Skip(2 + _HTTP_CLIENT_RETRY_DEDUP_SKIP_COUNT).
+					Extra(map[string]any{"attempt": attempt}).
+					Cause(err)
 			}
 
 			if response.StatusCode >= 400 && retryOnBadStatusCode {
 				response.Body.Close()
-				return ErrHTTPClientBadStatus.Raise(response.StatusCode).Skip(2)
+				return ErrHTTPClientBadStatus.Raise(response.StatusCode).
+					Skip(2 + _HTTP_CLIENT_RETRY_DEDUP_SKIP_COUNT).
+					Extra(map[string]any{"attempt": attempt, "status": response.StatusCode})
 			}
 
 			return nil

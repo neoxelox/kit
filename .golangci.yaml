@@ -244,7 +244,7 @@ linters-settings:
       - name: add-constant
         arguments:
           - maxLitCount: "3"
-            allowStrs: '"",":",": ","%v","%+v","%s","%d"'
+            allowStrs: '""," ",":",": ","%v","%+v","%s","%d"'
             allowInts: "0,1,2,3,10"
             allowFloats: "0.0,0.1,0.2,0.25,0.5,1.0,2.0,3.0,10.0"
       - name: unused-receiver
