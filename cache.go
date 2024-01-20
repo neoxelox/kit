@@ -177,9 +177,9 @@ func _chErrToError(err error) *errors.Error {
 
 	switch err {
 	case cache.ErrCacheMiss:
-		return ErrCacheMiss.Raise().Skip(1).Cause(err)
+		return ErrCacheMiss.Raise().Skip(2).Cause(err)
 	default:
-		return ErrCacheGeneric.Raise().Skip(1).Cause(err)
+		return ErrCacheGeneric.Raise().Skip(2).Cause(err)
 	}
 }
 

@@ -13,8 +13,9 @@ import (
 )
 
 var (
-	ErrHTTPClientGeneric  = errors.New("http client failed")
-	ErrHTTPClientTimedOut = errors.New("http client timed out")
+	ErrHTTPClientGeneric   = errors.New("http client failed")
+	ErrHTTPClientTimedOut  = errors.New("http client timed out")
+	ErrHTTPClientBadStatus = errors.New("http client bad status code (%d)")
 )
 
 var (
@@ -82,6 +83,14 @@ func (self *HTTPClient) _do(request *http.Request, retry *RetryConfig) (*http.Re
 	_, endTraceRequest := self.observer.TraceClientRequest(request.Context(), request)
 	defer endTraceRequest()
 
+	retryOnBadStatusCode := false
+	for _, err := range retry.Retriables {
+		if ErrHTTPClientBadStatus.Is(err) {
+			retryOnBadStatusCode = true
+			break
+		}
+	}
+
 	var response *http.Response
 
 	err := util.ExponentialRetry(
@@ -94,10 +103,15 @@ func (self *HTTPClient) _do(request *http.Request, retry *RetryConfig) (*http.Re
 			if err != nil {
 				if urlErr, ok := err.(*url.Error); ok && urlErr.Timeout() {
 					return ErrHTTPClientTimedOut.Raise().
-						Skip(1).Extra(map[string]any{"attempt": attempt, "timeout": self.config.Timeout}).Cause(err)
+						Skip(2).Extra(map[string]any{"attempt": attempt, "timeout": self.config.Timeout}).Cause(err)
 				}
 
-				return ErrHTTPClientGeneric.Raise().Skip(1).Extra(map[string]any{"attempt": attempt}).Cause(err)
+				return ErrHTTPClientGeneric.Raise().Skip(2).Extra(map[string]any{"attempt": attempt}).Cause(err)
+			}
+
+			if response.StatusCode >= 400 && retryOnBadStatusCode {
+				response.Body.Close()
+				return ErrHTTPClientBadStatus.Raise(response.StatusCode).Skip(2)
 			}
 
 			return nil

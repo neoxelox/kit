@@ -233,15 +233,15 @@ func _dbErrToError(err error) *errors.Error {
 		case pgerrcode.IntegrityConstraintViolation, pgerrcode.RestrictViolation, pgerrcode.NotNullViolation,
 			pgerrcode.ForeignKeyViolation, pgerrcode.UniqueViolation, pgerrcode.CheckViolation,
 			pgerrcode.ExclusionViolation:
-			return ErrDatabaseIntegrityViolation.Raise().Skip(1).Cause(err)
+			return ErrDatabaseIntegrityViolation.Raise().Skip(2).Cause(err)
 		}
 	}
 
 	switch err {
 	case pgx.ErrNoRows:
-		return ErrDatabaseNoRows.Raise().Skip(1).Cause(err)
+		return ErrDatabaseNoRows.Raise().Skip(2).Cause(err)
 	default:
-		return ErrDatabaseGeneric.Raise().Skip(1).Cause(err)
+		return ErrDatabaseGeneric.Raise().Skip(2).Cause(err)
 	}
 }
 
