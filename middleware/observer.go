@@ -103,7 +103,7 @@ func (self *Observer) HandleTask(next asynq.Handler) asynq.Handler {
 			queue = qname.String()
 		}
 
-		// TODO: find a way to get the real task execution state
+		// TODO: find a way to get the real task execution state (panics are shown as succeeded)
 		status := "succeeded"
 		if err != nil {
 			status = "failed"

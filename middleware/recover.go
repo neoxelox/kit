@@ -65,12 +65,10 @@ func (self *Recover) HandleTask(next asynq.Handler) asynq.Handler {
 			if rec != nil {
 				err, ok := rec.(error)
 				if !ok {
-					err = kit.ErrWorkerGeneric.Raise().With("%v", rec)
+					err = kit.ErrWorkerGeneric.Raise().Skip(2).With("%v", rec)
 				}
 
-				// Log error ourselves ...?
-				// TODO: Test if the worker survives with a panic
-				// and check whether the error is passed to the observer???
+				// Log error ourselves as the error is not passed to the error handler
 				self.observer.Error(ctx, err)
 			}
 		}()
