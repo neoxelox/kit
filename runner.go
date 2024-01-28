@@ -86,6 +86,8 @@ func NewRunner(observer *Observer, errorHandler *ErrorHandler, config RunnerConf
 
 func (self *Runner) Run(ctx context.Context) error {
 	self.observer.Infof(ctx, "Runner started with arguments %v", os.Args[1:])
+	// Flush async logging in order not to interfere with command output
+	self.observer.Flush(ctx)
 
 	err := self.runner.Run(os.Args[1:])
 	if err != nil && err != cli.ExitError {
@@ -105,7 +107,7 @@ func (self *Runner) Register(command string, handler RunnerHandler, args any, de
 	self.runner.Register(&cli.Command{
 		Name: command,
 		Desc: _description,
-		Argv: func() any { return util.Copy(args) },
+		Argv: func() any { return util.Pointer(args) },
 		Fn: func(ctx *cli.Context) error {
 			// Error handler has to be the last middleware in order to use the possible traced context
 			handler = self.errorHandler.HandleCommand(handler)
