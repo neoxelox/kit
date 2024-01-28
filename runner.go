@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reflect"
 
 	"github.com/mkideal/cli"
 	"github.com/neoxelox/errors"
@@ -107,7 +108,7 @@ func (self *Runner) Register(command string, handler RunnerHandler, args any, de
 	self.runner.Register(&cli.Command{
 		Name: command,
 		Desc: _description,
-		Argv: func() any { return util.Pointer(args) },
+		Argv: func() any { return reflect.New(reflect.TypeOf(args)).Interface() },
 		Fn: func(ctx *cli.Context) error {
 			// Error handler has to be the last middleware in order to use the possible traced context
 			handler = self.errorHandler.HandleCommand(handler)
