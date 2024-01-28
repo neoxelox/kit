@@ -296,12 +296,15 @@ func (self *Migrator) Rollback(ctx context.Context, schemaVersion int) error {
 			}
 
 			if bad {
-				self.observer.Infof(ctx, "Current schema version %d is dirty, ignoring", currentSchemaVersion)
+				self.observer.Infof(
+					ctx, "Current schema version %d is dirty, setting desired to last version", currentSchemaVersion)
 
 				err = self.migrator.Force(int(currentSchemaVersion))
 				if err != nil {
 					return ErrMigratorGeneric.Raise().Cause(err)
 				}
+
+				schemaVersion--
 			}
 
 			if currentSchemaVersion == uint(schemaVersion) {
@@ -316,9 +319,16 @@ func (self *Migrator) Rollback(ctx context.Context, schemaVersion int) error {
 
 			self.observer.Infof(ctx, "%d migrations to be rollbacked", int(currentSchemaVersion)-schemaVersion)
 
-			err = self.migrator.Migrate(uint(schemaVersion))
-			if err != nil {
-				return ErrMigratorGeneric.Raise().Cause(err)
+			if schemaVersion == 0 {
+				err = self.migrator.Down()
+				if err != nil {
+					return ErrMigratorGeneric.Raise().Cause(err)
+				}
+			} else {
+				err = self.migrator.Migrate(uint(schemaVersion))
+				if err != nil {
+					return ErrMigratorGeneric.Raise().Cause(err)
+				}
 			}
 
 			self.observer.Info(ctx, "Rollbacked all migrations successfully")
