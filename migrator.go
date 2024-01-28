@@ -119,7 +119,7 @@ func NewMigrator(ctx context.Context, observer *Observer, config MigratorConfig,
 }
 
 // TODO: concurrent-safe
-func (self *Migrator) Version(ctx context.Context) (uint, bool, error) {
+func (self *Migrator) Version(ctx context.Context) (int, bool, error) {
 	self.done = make(chan struct{}, 1)
 
 	if ctxDeadline, ok := ctx.Deadline(); ok {
@@ -160,7 +160,7 @@ func (self *Migrator) Version(ctx context.Context) (uint, bool, error) {
 		return 0, false, err
 	}
 
-	return schemaVersion, dirty, nil
+	return int(schemaVersion), dirty, nil
 }
 
 // TODO: concurrent-safe
