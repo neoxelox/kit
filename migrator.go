@@ -281,6 +281,7 @@ func (self *Migrator) Apply(ctx context.Context, schemaVersion int) error {
 }
 
 // TODO: concurrent-safe
+// nolint:gocognit,revive
 func (self *Migrator) Rollback(ctx context.Context, schemaVersion int) error {
 	self.done = make(chan struct{}, 1)
 
