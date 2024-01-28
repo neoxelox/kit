@@ -6,6 +6,7 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/labstack/echo/v4"
+	"github.com/mkideal/cli"
 
 	"github.com/neoxelox/kit"
 	"github.com/neoxelox/kit/util"
@@ -59,7 +60,7 @@ func (self *Recover) HandleRequest(next echo.HandlerFunc) echo.HandlerFunc {
 }
 
 func (self *Recover) HandleTask(next asynq.Handler) asynq.Handler {
-	return asynq.HandlerFunc(func(ctx context.Context, task *asynq.Task) error {
+	return asynq.HandlerFunc(func(ctx context.Context, task *asynq.Task) (ret error) { // nolint:nonamedreturns
 		defer func() {
 			rec := recover()
 			if rec != nil {
@@ -70,9 +71,32 @@ func (self *Recover) HandleTask(next asynq.Handler) asynq.Handler {
 
 				// Log error ourselves as the error is not passed to the error handler
 				self.observer.Error(ctx, err)
+				// Return panic error upwards
+				ret = err
 			}
 		}()
 
 		return next.ProcessTask(ctx, task)
 	})
+}
+
+func (self *Recover) HandleCommand(next kit.RunnerHandler) kit.RunnerHandler {
+	return func(ctx context.Context, command *cli.Context) (ret error) { // nolint:nonamedreturns
+		defer func() {
+			rec := recover()
+			if rec != nil {
+				err, ok := rec.(error)
+				if !ok {
+					err = kit.ErrRunnerGeneric.Raise().Skip(2).With("%v", rec)
+				}
+
+				// Log error ourselves as the error is not passed to the error handler
+				self.observer.Error(ctx, err)
+				// Return panic error upwards
+				ret = err
+			}
+		}()
+
+		return next(ctx, command)
+	}
 }
