@@ -119,6 +119,51 @@ func NewMigrator(ctx context.Context, observer *Observer, config MigratorConfig,
 }
 
 // TODO: concurrent-safe
+func (self *Migrator) Version(ctx context.Context) (uint, bool, error) {
+	self.done = make(chan struct{}, 1)
+
+	if ctxDeadline, ok := ctx.Deadline(); ok {
+		self.migrator.LockTimeout = time.Until(ctxDeadline)
+	}
+
+	schemaVersion := uint(0)
+	dirty := false
+
+	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
+		err := func() error {
+			var err error
+
+			schemaVersion, dirty, err = self.migrator.Version()
+			if err != nil && err != migrate.ErrNilVersion {
+				return ErrMigratorGeneric.Raise().Cause(err)
+			}
+
+			return nil
+		}()
+
+		select {
+		case <-self.done:
+		default:
+			close(self.done)
+		}
+
+		return err
+	})
+
+	self.migrator.LockTimeout = migrate.DefaultLockTimeout
+
+	if err != nil {
+		if util.ErrDeadlineExceeded.Is(err) {
+			return 0, false, ErrMigratorTimedOut.Raise().Cause(err)
+		}
+
+		return 0, false, err
+	}
+
+	return schemaVersion, dirty, nil
+}
+
+// TODO: concurrent-safe
 func (self *Migrator) Assert(ctx context.Context, schemaVersion int) error {
 	self.done = make(chan struct{}, 1)
 
