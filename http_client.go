@@ -17,9 +17,10 @@ const (
 )
 
 var (
-	ErrHTTPClientGeneric   = errors.New("http client failed")
-	ErrHTTPClientTimedOut  = errors.New("http client timed out")
-	ErrHTTPClientBadStatus = errors.New("http client bad status code (%d)")
+	ErrHTTPClientGeneric     = errors.New("http client failed")
+	ErrHTTPClientTimedOut    = errors.New("http client timed out")
+	ErrHTTPClientBadStatus   = errors.New("http client bad status (%d)")
+	ErrHTTPClientRateLimited = errors.New("http client rate limited (%s)")
 )
 
 var (
@@ -87,10 +88,15 @@ func (self *HTTPClient) _do(request *http.Request, retry *RetryConfig) (*http.Re
 	_, endTraceRequest := self.observer.TraceClientRequest(request.Context(), request)
 	defer endTraceRequest()
 
-	retryOnBadStatusCode := false
+	retryOnBadStatus := false
+	retryOnRateLimited := false
 	for _, err := range retry.Retriables {
 		if ErrHTTPClientBadStatus.Is(err) {
-			retryOnBadStatusCode = true
+			retryOnBadStatus = true
+			break
+		}
+		if ErrHTTPClientRateLimited.Is(err) {
+			retryOnRateLimited = true
 			break
 		}
 	}
@@ -118,7 +124,15 @@ func (self *HTTPClient) _do(request *http.Request, retry *RetryConfig) (*http.Re
 					Cause(err)
 			}
 
-			if response.StatusCode >= 400 && retryOnBadStatusCode {
+			if response.StatusCode == 429 && retryOnRateLimited {
+				retryAfter := response.Header.Get("Retry-After")
+				response.Body.Close()
+				return ErrHTTPClientRateLimited.Raise(retryAfter).
+					Skip(2 + _HTTP_CLIENT_RETRY_DEDUP_SKIP_COUNT).
+					Extra(map[string]any{"attempt": attempt, "status": response.StatusCode, "wait": retryAfter})
+			}
+
+			if response.StatusCode >= 400 && response.StatusCode != 429 && retryOnBadStatus {
 				response.Body.Close()
 				return ErrHTTPClientBadStatus.Raise(response.StatusCode).
 					Skip(2 + _HTTP_CLIENT_RETRY_DEDUP_SKIP_COUNT).
