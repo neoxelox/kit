@@ -1,6 +1,7 @@
 package kit
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net/http"
@@ -74,14 +75,19 @@ func NewHTTPClient(observer *Observer, config HTTPClientConfig) *HTTPClient {
 
 func (self *HTTPClient) Request(
 	ctx context.Context, method string, url string,
-	body io.Reader, headers map[string]string, retry ...RetryConfig) (*http.Response, error) {
+	body []byte, headers map[string]string, retry ...RetryConfig) (*http.Response, error) {
 	_retry := util.Optional(retry, *self.config.DefaultRetry)
 
 	if self.config.BaseURL != nil {
 		url = *self.config.BaseURL + url
 	}
 
-	request, err := http.NewRequestWithContext(ctx, method, url, body)
+	var buffer io.Reader = nil
+	if len(body) > 0 {
+		buffer = bytes.NewReader(body)
+	}
+
+	request, err := http.NewRequestWithContext(ctx, method, url, buffer)
 	if err != nil {
 		return nil, ErrHTTPClientGeneric.Raise().Cause(err)
 	}
