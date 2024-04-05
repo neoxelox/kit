@@ -116,13 +116,11 @@ func (self *HTTPClient) _do(request *http.Request, retry *RetryConfig) (*http.Re
 	retryOnBadStatus := false
 	retryOnRateLimited := false
 	for _, err := range retry.Retriables {
-		if ErrHTTPClientBadStatus.Is(err) {
+		switch {
+		case ErrHTTPClientBadStatus.Is(err):
 			retryOnBadStatus = true
-			break
-		}
-		if ErrHTTPClientRateLimited.Is(err) {
+		case ErrHTTPClientRateLimited.Is(err):
 			retryOnRateLimited = true
-			break
 		}
 	}
 
