@@ -25,6 +25,8 @@ var (
 
 var (
 	_HTTP_CLIENT_DEFAULT_CONFIG = HTTPClientConfig{
+		BaseURL:          nil,
+		Headers:          nil,
 		AllowedRedirects: util.Pointer(0),
 		DefaultRetry: &RetryConfig{
 			Attempts:     1,
@@ -37,6 +39,8 @@ var (
 
 type HTTPClientConfig struct {
 	Timeout          time.Duration
+	BaseURL          *string
+	Headers          *map[string]string
 	AllowedRedirects *int
 	DefaultRetry     *RetryConfig
 }
@@ -69,12 +73,21 @@ func NewHTTPClient(observer *Observer, config HTTPClientConfig) *HTTPClient {
 }
 
 func (self *HTTPClient) Request(
-	ctx context.Context, method string, url string, body io.Reader, retry ...RetryConfig) (*http.Response, error) {
+	ctx context.Context, method string, url string,
+	body io.Reader, headers map[string]string, retry ...RetryConfig) (*http.Response, error) {
 	_retry := util.Optional(retry, *self.config.DefaultRetry)
+
+	if self.config.BaseURL != nil {
+		url = *self.config.BaseURL + url
+	}
 
 	request, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return nil, ErrHTTPClientGeneric.Raise().Cause(err)
+	}
+
+	for header, value := range headers {
+		request.Header.Set(header, value)
 	}
 
 	return self._do(request, &_retry)
@@ -85,6 +98,12 @@ func (self *HTTPClient) Do(request *http.Request) (*http.Response, error) {
 }
 
 func (self *HTTPClient) _do(request *http.Request, retry *RetryConfig) (*http.Response, error) {
+	if self.config.Headers != nil {
+		for header, value := range *self.config.Headers {
+			request.Header.Set(header, value)
+		}
+	}
+
 	_, endTraceRequest := self.observer.TraceClientRequest(request.Context(), request)
 	defer endTraceRequest()
 
