@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/neoxelox/errors"
@@ -21,13 +22,14 @@ var (
 	ErrHTTPClientGeneric     = errors.New("http client failed")
 	ErrHTTPClientTimedOut    = errors.New("http client timed out")
 	ErrHTTPClientBadStatus   = errors.New("http client bad status (%d)")
-	ErrHTTPClientRateLimited = errors.New("http client rate limited (%s)")
+	ErrHTTPClientRateLimited = errors.New("http client rate limited (%d)")
 )
 
 var (
 	_HTTP_CLIENT_DEFAULT_CONFIG = HTTPClientConfig{
 		BaseURL:          nil,
 		Headers:          nil,
+		RaiseForStatus:   util.Pointer(false),
 		AllowedRedirects: util.Pointer(0),
 		DefaultRetry: &RetryConfig{
 			Attempts:     1,
@@ -42,6 +44,7 @@ type HTTPClientConfig struct {
 	Timeout          time.Duration
 	BaseURL          *string
 	Headers          *map[string]string
+	RaiseForStatus   *bool
 	AllowedRedirects *int
 	DefaultRetry     *RetryConfig
 }
@@ -113,17 +116,6 @@ func (self *HTTPClient) _do(request *http.Request, retry *RetryConfig) (*http.Re
 	_, endTraceRequest := self.observer.TraceClientRequest(request.Context(), request)
 	defer endTraceRequest()
 
-	retryOnBadStatus := false
-	retryOnRateLimited := false
-	for _, err := range retry.Retriables {
-		switch {
-		case ErrHTTPClientBadStatus.Is(err):
-			retryOnBadStatus = true
-		case ErrHTTPClientRateLimited.Is(err):
-			retryOnRateLimited = true
-		}
-	}
-
 	var response *http.Response
 
 	err := util.ExponentialRetry(
@@ -147,15 +139,29 @@ func (self *HTTPClient) _do(request *http.Request, retry *RetryConfig) (*http.Re
 					Cause(err)
 			}
 
-			if response.StatusCode == 429 && retryOnRateLimited {
-				retryAfter := response.Header.Get("Retry-After")
+			if response.StatusCode == 429 && *self.config.RaiseForStatus {
+				wait := int64(0)
+
+				if retryAfter := response.Header.Get("Retry-After"); len(retryAfter) > 0 {
+					wait, _ = strconv.ParseInt(retryAfter, 10, 0)
+				} else if retryOn := response.Header.Get("X-Rate-Limit-Reset"); len(retryOn) > 0 {
+					retryOnInt, _ := strconv.ParseInt(retryOn, 10, 0)
+					now := time.Now().Unix()
+					if retryOnInt > now {
+						wait = retryOnInt - now
+					} else {
+						wait = retryOnInt
+					}
+				}
+
 				response.Body.Close()
-				return ErrHTTPClientRateLimited.Raise(retryAfter).
+
+				return ErrHTTPClientRateLimited.Raise(wait).
 					Skip(2 + _HTTP_CLIENT_RETRY_DEDUP_SKIP_COUNT).
-					Extra(map[string]any{"attempt": attempt, "status": response.StatusCode, "wait": retryAfter})
+					Extra(map[string]any{"attempt": attempt, "status": response.StatusCode, "wait": wait})
 			}
 
-			if response.StatusCode >= 400 && response.StatusCode != 429 && retryOnBadStatus {
+			if response.StatusCode >= 400 && response.StatusCode != 429 && *self.config.RaiseForStatus {
 				response.Body.Close()
 				return ErrHTTPClientBadStatus.Raise(response.StatusCode).
 					Skip(2 + _HTTP_CLIENT_RETRY_DEDUP_SKIP_COUNT).
