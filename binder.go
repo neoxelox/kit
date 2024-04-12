@@ -35,7 +35,13 @@ func NewBinder(observer *Observer, config BinderConfig) *Binder {
 }
 
 func (self *Binder) Bind(i any, c echo.Context) error {
-	if err := self.binder.Bind(i, c); err != nil {
+	err := self.binder.Bind(i, c)
+	if err != nil {
+		return ErrBinderGeneric.Raise().Cause(err)
+	}
+
+	err = self.binder.BindHeaders(c, i)
+	if err != nil {
 		return ErrBinderGeneric.Raise().Cause(err)
 	}
 
