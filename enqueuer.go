@@ -31,6 +31,7 @@ var (
 		CacheReadTimeout:  util.Pointer(30 * time.Second),
 		CacheWriteTimeout: util.Pointer(30 * time.Second),
 		CacheDialTimeout:  util.Pointer(30 * time.Second),
+		TaskDefaultRetry:  util.Pointer(0),
 	}
 )
 
@@ -43,6 +44,7 @@ type EnqueuerConfig struct {
 	CacheReadTimeout  *time.Duration
 	CacheWriteTimeout *time.Duration
 	CacheDialTimeout  *time.Duration
+	TaskDefaultRetry  *int
 }
 
 type Enqueuer struct {
@@ -106,7 +108,8 @@ func (self *Enqueuer) Enqueue(ctx context.Context, task string, params any, opti
 		return ErrEnqueuerGeneric.Raise().Cause(err)
 	}
 
-	info, err := self.client.EnqueueContext(ctx, asynq.NewTask(task, payload), options...)
+	info, err := self.client.EnqueueContext(ctx,
+		asynq.NewTask(task, payload, asynq.MaxRetry(*self.config.TaskDefaultRetry)), options...)
 	if err != nil {
 		return ErrEnqueuerGeneric.Raise().Cause(err)
 	}
