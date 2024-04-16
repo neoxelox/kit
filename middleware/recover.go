@@ -72,9 +72,8 @@ func (self *Recover) HandleTask(next asynq.Handler) asynq.Handler {
 					err = kit.ErrWorkerGeneric.Raise().Skip(2).Cause(err)
 				}
 
-				// Log error ourselves as the error is not passed to the error handler
-				self.observer.Error(ctx, err)
-				// Return panic error upwards
+				// The error is passed to the error handler after the middlewares
+				// Return panic error so upwards middlewares are aware of it
 				ret = err
 			}
 		}()
@@ -95,9 +94,8 @@ func (self *Recover) HandleCommand(next kit.RunnerHandler) kit.RunnerHandler {
 					err = kit.ErrRunnerGeneric.Raise().Skip(2).Cause(err)
 				}
 
-				// Log error ourselves as the error is not passed to the error handler
-				self.observer.Error(ctx, err)
-				// Return panic error upwards
+				// The error is not passed to the error handler but is logged by the runner after the middlewares
+				// Return panic error so upwards middlewares are aware of it
 				ret = err
 			}
 		}()
