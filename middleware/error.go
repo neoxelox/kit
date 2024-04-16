@@ -36,6 +36,6 @@ func (self *Error) Handle(next echo.HandlerFunc) echo.HandlerFunc {
 			ctx.Error(err)
 		}
 
-		return err
+		return nil
 	}
 }

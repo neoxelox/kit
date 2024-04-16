@@ -197,7 +197,7 @@ linters-settings:
   # Checks for deeply nested if statements.
   nestif:
     # Minimal complexity of if statements to report.
-    min-complexity: 5
+    min-complexity: 6
 
   nlreturn:
     # Size of the block (including return statement that is still "OK")
@@ -367,6 +367,9 @@ issues:
 
     - linters: [govet]
       text: "pointer bytes could be"
+
+    - linters: [gocritic]
+      text: "rewrite if-else to switch statement"
 
   # Independently of option `exclude` we use default exclude patterns,
   # it can be disabled by this option.

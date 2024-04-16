@@ -44,10 +44,11 @@ func (self *Recover) HandleRequest(next echo.HandlerFunc) echo.HandlerFunc {
 				err, ok := rec.(error)
 				if !ok {
 					err = kit.ErrHTTPServerGeneric.Raise().With("%v", rec)
-				}
-
-				if err == http.ErrAbortHandler {
+				} else if err == http.ErrAbortHandler {
+					// http.ErrAbortHandler has to be handled by the HTTP server
 					panic(err)
+				} else {
+					err = kit.ErrHTTPServerGeneric.Raise().Cause(err)
 				}
 
 				// Pass error to the error handler to serialize and write error response
@@ -67,6 +68,8 @@ func (self *Recover) HandleTask(next asynq.Handler) asynq.Handler {
 				err, ok := rec.(error)
 				if !ok {
 					err = kit.ErrWorkerGeneric.Raise().Skip(2).With("%v", rec)
+				} else {
+					err = kit.ErrWorkerGeneric.Raise().Skip(2).Cause(err)
 				}
 
 				// Log error ourselves as the error is not passed to the error handler
@@ -88,6 +91,8 @@ func (self *Recover) HandleCommand(next kit.RunnerHandler) kit.RunnerHandler {
 				err, ok := rec.(error)
 				if !ok {
 					err = kit.ErrRunnerGeneric.Raise().Skip(2).With("%v", rec)
+				} else {
+					err = kit.ErrRunnerGeneric.Raise().Skip(2).Cause(err)
 				}
 
 				// Log error ourselves as the error is not passed to the error handler

@@ -129,11 +129,6 @@ func (self *Timeout) handlePanicked(ctx *_timeoutHandlerCtx) {
 }
 
 func (self *Timeout) handleFinished(ctx *_timeoutHandlerCtx) {
-	// Pass error to the error handler to serialize and write error response to timeout writer
-	if ctx.handlerError != nil {
-		ctx.handlerCtx.Error(ctx.handlerError)
-	}
-
 	ctx.timeoutWriter.mutex.Lock()
 	defer ctx.timeoutWriter.mutex.Unlock()
 
