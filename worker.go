@@ -34,31 +34,33 @@ var _KlevelToAlevel = map[Level]asynq.LogLevel{
 
 var (
 	_WORKER_DEFAULT_CONFIG = WorkerConfig{
-		Concurrency:       util.Pointer(4 * runtime.GOMAXPROCS(-1)),
-		StrictPriority:    util.Pointer(false),
-		StopTimeout:       util.Pointer(30 * time.Second),
-		TimeZone:          time.UTC,
-		CacheMaxConns:     util.Pointer(max(8, 4*runtime.GOMAXPROCS(-1))),
-		CacheReadTimeout:  util.Pointer(30 * time.Second),
-		CacheWriteTimeout: util.Pointer(30 * time.Second),
-		CacheDialTimeout:  util.Pointer(30 * time.Second),
+		Concurrency:          util.Pointer(4 * runtime.GOMAXPROCS(-1)),
+		StrictPriority:       util.Pointer(false),
+		StopTimeout:          util.Pointer(30 * time.Second),
+		TimeZone:             time.UTC,
+		ScheduleDefaultRetry: util.Pointer(0),
+		CacheMaxConns:        util.Pointer(max(8, 4*runtime.GOMAXPROCS(-1))),
+		CacheReadTimeout:     util.Pointer(30 * time.Second),
+		CacheWriteTimeout:    util.Pointer(30 * time.Second),
+		CacheDialTimeout:     util.Pointer(30 * time.Second),
 	}
 )
 
 type WorkerConfig struct {
-	Queues            map[string]int
-	Concurrency       *int
-	StrictPriority    *bool
-	StopTimeout       *time.Duration
-	TimeZone          *time.Location
-	CacheHost         string
-	CachePort         int
-	CacheSSLMode      bool
-	CachePassword     string
-	CacheMaxConns     *int
-	CacheReadTimeout  *time.Duration
-	CacheWriteTimeout *time.Duration
-	CacheDialTimeout  *time.Duration
+	Queues               map[string]int
+	Concurrency          *int
+	StrictPriority       *bool
+	StopTimeout          *time.Duration
+	TimeZone             *time.Location
+	ScheduleDefaultRetry *int
+	CacheHost            string
+	CachePort            int
+	CacheSSLMode         bool
+	CachePassword        string
+	CacheMaxConns        *int
+	CacheReadTimeout     *time.Duration
+	CacheWriteTimeout    *time.Duration
+	CacheDialTimeout     *time.Duration
 }
 
 type Worker struct {
@@ -163,7 +165,8 @@ func (self *Worker) Schedule(task string, params any, cron string, options ...as
 		self.observer.Panicf(context.Background(), "%s: %v", task, err)
 	}
 
-	_, err = self.scheduler.Register(cron, asynq.NewTask(task, payload), options...)
+	_, err = self.scheduler.Register(cron,
+		asynq.NewTask(task, payload, asynq.MaxRetry(*self.config.ScheduleDefaultRetry)), options...)
 	if err != nil {
 		self.observer.Panicf(context.Background(), "%s: %v", task, err)
 	}
