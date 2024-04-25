@@ -91,11 +91,13 @@ func (self *Enqueuer) Enqueue(ctx context.Context, task string, params any, opti
 		return ErrEnqueuerGeneric.Raise().Cause(err)
 	}
 
-	var data map[string]any
+	data := make(map[string]any)
 
-	err = json.Unmarshal(payload, &data)
-	if err != nil {
-		return ErrEnqueuerGeneric.Raise().Cause(err)
+	if params != nil {
+		err = json.Unmarshal(payload, &data)
+		if err != nil {
+			return ErrEnqueuerGeneric.Raise().Cause(err)
+		}
 	}
 
 	data[_ENQUEUER_TASK_TRACE_ID_HEADER] = traceID
