@@ -55,7 +55,7 @@ var (
 	LvlInfo  Level = -3
 	LvlWarn  Level = -2
 	LvlError Level = -1
-	LvlNone  Level
+	LvlNone  Level = 0
 )
 
 type LoggerConfig struct {

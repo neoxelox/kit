@@ -71,9 +71,9 @@ type IsolationLevel int
 
 var (
 	IsoLvlReadUncommitted IsolationLevel = 0
-	IsoLvlReadCommitted   IsolationLevel
-	IsoLvlRepeatableRead  IsolationLevel
-	IsoLvlSerializable    IsolationLevel
+	IsoLvlReadCommitted   IsolationLevel = 1
+	IsoLvlRepeatableRead  IsolationLevel = 2
+	IsoLvlSerializable    IsolationLevel = 3
 )
 
 var _KisoLevelToPisoLevel = map[IsolationLevel]pgx.TxIsoLevel{
