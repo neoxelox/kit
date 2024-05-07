@@ -264,6 +264,10 @@ func (self *Database) Query(ctx context.Context, stmt *sqlf.Stmt) error {
 		rows, err = self.pool.Query(ctx, sql, args...)
 	}
 
+	if rows != nil {
+		defer rows.Close()
+	}
+
 	if err != nil {
 		return _dbErrToError(err)
 	}
