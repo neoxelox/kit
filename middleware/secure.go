@@ -20,6 +20,7 @@ var (
 		CORSAllowOrigins:      util.Pointer([]string{"*"}),
 		CORSAllowMethods:      util.Pointer([]string{"*"}),
 		CORSAllowHeaders:      util.Pointer([]string{"*"}),
+		CORSAllowCredentials:  util.Pointer(false),
 		CORSMaxAge:            util.Pointer(int((24 * time.Hour).Seconds())),
 		XSSProtection:         util.Pointer("1; mode=block"),
 		XFrameOptions:         util.Pointer("SAMEORIGIN"),
@@ -37,6 +38,7 @@ type SecureConfig struct {
 	CORSAllowOrigins      *[]string
 	CORSAllowMethods      *[]string
 	CORSAllowHeaders      *[]string
+	CORSAllowCredentials  *bool
 	CORSMaxAge            *int
 	XSSProtection         *string
 	XFrameOptions         *string
@@ -64,10 +66,11 @@ func NewSecure(observer *kit.Observer, config SecureConfig) *Secure {
 		"%s %s", *config.ContentSecurityPolicy, strings.Join(*config.CORSAllowOrigins, " "))
 
 	corsMiddleware := echoMiddleware.CORSWithConfig(echoMiddleware.CORSConfig{
-		AllowOrigins: *config.CORSAllowOrigins,
-		AllowMethods: *config.CORSAllowMethods,
-		AllowHeaders: *config.CORSAllowHeaders,
-		MaxAge:       *config.CORSMaxAge,
+		AllowOrigins:     *config.CORSAllowOrigins,
+		AllowMethods:     *config.CORSAllowMethods,
+		AllowHeaders:     *config.CORSAllowHeaders,
+		AllowCredentials: *config.CORSAllowCredentials,
+		MaxAge:           *config.CORSMaxAge,
 	})
 
 	secureMiddleware := echoMiddleware.SecureWithConfig(echoMiddleware.SecureConfig{
