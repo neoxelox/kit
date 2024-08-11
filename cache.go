@@ -220,6 +220,22 @@ func (self *Cache) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
+func (self *Cache) Find(ctx context.Context, pattern string) ([]string, error) {
+	keys := []string{}
+
+	iter := self.pool.Scan(ctx, 0, pattern, 0).Iterator()
+	for iter.Next(ctx) {
+		keys = append(keys, iter.Val())
+	}
+
+	err := iter.Err()
+	if err != nil {
+		return nil, _chErrToError(err)
+	}
+
+	return keys, nil
+}
+
 func (self *Cache) Close(ctx context.Context) error {
 	err := util.Deadline(ctx, func(exceeded <-chan struct{}) error {
 		self.observer.Info(ctx, "Closing cache")
