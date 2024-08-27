@@ -22,11 +22,12 @@ var (
 var (
 	HTTPErrServerGeneric     = NewHTTPError("ERR_SERVER_GENERIC", http.StatusInternalServerError)
 	HTTPErrServerUnavailable = NewHTTPError("ERR_SERVER_UNAVAILABLE", http.StatusServiceUnavailable)
-	HTTPErrRequestTimeout    = NewHTTPError("ERR_REQUEST_TIMEOUT", http.StatusGatewayTimeout)
+	HTTPErrServerTimeout     = NewHTTPError("ERR_SERVER_TIMEOUT", http.StatusGatewayTimeout)
 	HTTPErrClientGeneric     = NewHTTPError("ERR_CLIENT_GENERIC", http.StatusBadRequest)
 	HTTPErrInvalidRequest    = NewHTTPError("ERR_INVALID_REQUEST", http.StatusBadRequest)
 	HTTPErrNotFound          = NewHTTPError("ERR_NOT_FOUND", http.StatusNotFound)
 	HTTPErrUnauthorized      = NewHTTPError("ERR_UNAUTHORIZED", http.StatusUnauthorized)
+	HTTPErrRateLimited       = NewHTTPError("ERR_RATE_LIMITED", http.StatusTooManyRequests)
 )
 
 var (

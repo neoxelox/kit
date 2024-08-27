@@ -62,7 +62,7 @@ func (self *ErrorHandler) HandleRequest(err error, ctx echo.Context) {
 			case echo.ErrStatusRequestEntityTooLarge:
 				httpError = HTTPErrInvalidRequest.Cause(err)
 			case http.ErrHandlerTimeout:
-				httpError = HTTPErrRequestTimeout.Cause(err)
+				httpError = HTTPErrServerTimeout.Cause(err)
 			default:
 				httpError = HTTPErrServerGeneric.Cause(err)
 			}

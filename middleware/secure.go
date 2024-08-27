@@ -28,7 +28,7 @@ var (
 		HSTSPreloadEnabled:    util.Pointer(true),
 		HSTSMaxAge:            util.Pointer(int((365 * 24 * time.Hour).Seconds())),
 		ContentTypeNosniff:    util.Pointer("nosniff"),
-		ContentSecurityPolicy: util.Pointer("default-src"),
+		ContentSecurityPolicy: util.Pointer("default-src 'self'"),
 		CSPReportOnly:         util.Pointer(false),
 		ReferrerPolicy:        util.Pointer("same-origin"),
 	}
